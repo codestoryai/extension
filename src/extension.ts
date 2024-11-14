@@ -7,6 +7,8 @@ import { startSidecarBinary } from "./utilities/setupSidecarBinary";
 import { AideAgentSessionProvider } from "./completions/providers/aideAgentProvider";
 import { ProjectContext } from "./utilities/workspaceContext";
 import { RecentEditsRetriever } from "./server/editedFiles";
+import { randomUUID } from "crypto";
+import { AideAgentMode } from "./types";
 
 export let SIDECAR_CLIENT: SideCarClient | null = null;
 
@@ -65,29 +67,29 @@ export async function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        //const { query, exchangeId } = message;
-        //const sessionId = randomUUID();
-        //
-        //const iterationEdits = new vscode.WorkspaceEdit();
-        //
-        //const stream = sidecarClient.agentSessionPlanStep(
-        //  query,
-        //  sessionId,
-        //  exchangeId,
-        //  editorUrl,
-        //  AideAgentMode.Edit,
-        //  [],
-        //  currentRepo,
-        //  projectContext.labels,
-        //  false,
-        //  "" // Don't pass token for now (people can put their own API keys)
-        //);
-
-        //const model = new ChatModel();
-        //const response = model.addResponse();
-        //const cts = new vscode.CancellationTokenSource();
-        //
-        //await reportAgentEventsToChat(true, stream);
+        const { query, exchangeId } = message;
+        const sessionId = randomUUID();
+        
+        const iterationEdits = new vscode.WorkspaceEdit();
+        
+        const stream = sidecarClient.agentSessionPlanStep(
+         query,
+         sessionId,
+         exchangeId,
+         editorUrl,
+         AideAgentMode.Edit,
+         [],
+         currentRepo,
+         projectContext.labels,
+         false,
+         "" // Don't pass token for now (people can put their own API keys)
+        );
+        // @theskcd uncomment the following and start from here
+        // const model = new ChatModel();
+        // const response = model.addResponse();
+        // const cts = new vscode.CancellationTokenSource();
+        
+        // await reportAgentEventsToChat(true, stream);
       }
     })
   );

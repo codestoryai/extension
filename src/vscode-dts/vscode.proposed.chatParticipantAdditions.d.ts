@@ -293,7 +293,6 @@ declare module 'vscode' {
 	}
 
 	export interface ChatCopyAction {
-		// eslint-disable-next-line local/vscode-dts-string-type-literals
 		kind: 'copy';
 		codeBlockIndex: number;
 		copyKind: ChatCopyKind;
@@ -303,7 +302,6 @@ declare module 'vscode' {
 	}
 
 	export interface ChatInsertAction {
-		// eslint-disable-next-line local/vscode-dts-string-type-literals
 		kind: 'insert';
 		codeBlockIndex: number;
 		totalCharacters: number;
@@ -311,7 +309,6 @@ declare module 'vscode' {
 	}
 
 	export interface ChatApplyAction {
-		// eslint-disable-next-line local/vscode-dts-string-type-literals
 		kind: 'apply';
 		codeBlockIndex: number;
 		totalCharacters: number;
@@ -320,26 +317,22 @@ declare module 'vscode' {
 	}
 
 	export interface ChatTerminalAction {
-		// eslint-disable-next-line local/vscode-dts-string-type-literals
 		kind: 'runInTerminal';
 		codeBlockIndex: number;
 		languageId?: string;
 	}
 
 	export interface ChatCommandAction {
-		// eslint-disable-next-line local/vscode-dts-string-type-literals
 		kind: 'command';
 		commandButton: ChatCommandButton;
 	}
 
 	export interface ChatFollowupAction {
-		// eslint-disable-next-line local/vscode-dts-string-type-literals
 		kind: 'followUp';
 		followup: ChatFollowup;
 	}
 
 	export interface ChatBugReportAction {
-		// eslint-disable-next-line local/vscode-dts-string-type-literals
 		kind: 'bug';
 	}
 
