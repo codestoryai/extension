@@ -104,7 +104,30 @@ interface InputToolbarProps {
   disabled?: boolean;
 }
 
-import ReactDOM from "react-dom";
+export function getAltKeyLabel(): string {
+  const platform = getPlatform();
+  switch (platform) {
+    case "mac":
+      return "⌥";
+    default:
+      return "Alt";
+  }
+}
+
+export function getMetaKeyLabel(): string {
+  const platform = getPlatform();
+  switch (platform) {
+    case "mac":
+      return "⌘";
+    case "linux":
+    case "windows":
+      return "^";
+    default:
+      return "^";
+  }
+}
+
+import {createPortal} from "react-dom";
 
 const TooltipStyles = {
   fontSize: `${getFontSize() - 2}px`,
@@ -128,7 +151,7 @@ export function ToolTip(props: any) {
 
   return (
     tooltipPortalDiv &&
-    ReactDOM.createPortal(
+    createPortal(
       <Tooltip {...props} style={combinedStyles} />,
       tooltipPortalDiv,
     )
@@ -783,6 +806,16 @@ interface TipTapEditorProps {
   historyKey: string;
 }
 
+function useUpdatingRef<T>(value: T, deps: any[] = []) {
+  const ref = useRef(value);
+
+  useEffect(() => {
+    ref.current = value;
+  }, [value, ...deps]);
+
+  return ref;
+}
+
 function TipTapEditor(props: TipTapEditorProps) {
   const dispatch = useDispatch();
 
@@ -842,9 +875,9 @@ function TipTapEditor(props: TipTapEditorProps) {
     inDropdownRef.current = true;
   };
 
-  const contextItems = useSelector(
-    (store: RootState) => store.state.contextItems,
-  );
+  // const contextItems = useSelector(
+  //   (store: RootState) => store.state.contextItems,
+  // );
 
   const defaultModel = useSelector(defaultModelSelector);
   const defaultModelRef = useUpdatingRef(defaultModel);
@@ -854,9 +887,9 @@ function TipTapEditor(props: TipTapEditorProps) {
     props.availableContextProviders,
   );
 
-  const historyLengthRef = useUpdatingRef(historyLength);
+  // const historyLengthRef = useUpdatingRef(historyLength);
 
-  const active = useSelector((state: RootState) => state.state.active);
+  // const active = useSelector((state: RootState) => state.state.active);
   const activeRef = useUpdatingRef(active);
 
   // Only set `hasDefaultModel` after a timeout to prevent jank
@@ -989,7 +1022,7 @@ function TipTapEditor(props: TipTapEditorProps) {
             "Alt-Enter": () => {
               onEnterRef.current({
                 useCodebase: false,
-                noContext: useActiveFile,
+                // noContext: useActiveFile,
               });
 
               return true;
