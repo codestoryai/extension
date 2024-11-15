@@ -1,10 +1,9 @@
 import * as React from "react";
 import { VSCodeBadge } from "vscode-elements/badge";
-import { VSCodeButton } from "vscode-elements/button";
-import { VSCodeTextArea } from "vscode-elements/textarea";
 
 import { RequestViewItem } from "components/exchange/request";
 import { ResponseViewItem } from "components/exchange/response";
+import Tiptap from "components/input/TipTapEditor";
 import { TaskDD, TaskDL, TaskDT } from "components/task-definition-list";
 import { Exchange, Task, Usage } from "../../model";
 import ClaudeLogo from "../assets/claude.svg";
@@ -99,14 +98,7 @@ export function TaskView(props: TaskViewProps) {
             </ol>
           )}
         </section>
-        <form onSubmit={onSubmit} ref={formRef}>
-          <VSCodeTextArea
-            className="w-full"
-            name="query"
-            onKeyDown={handleKeyDown}
-          />
-          <VSCodeButton type="submit">Send</VSCodeButton>
-        </form>
+        <Tiptap />
       </div>
     </main>
   );
