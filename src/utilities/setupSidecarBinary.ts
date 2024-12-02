@@ -44,23 +44,23 @@ export function getSidecarBinaryURL() {
   return 'http://127.0.0.1:42424';
 }
 
-// We are hardcoding the version of the sidecar binary here, so we can figure out
-// if the version we are looking at is okay, or we need to download a new binary
-// for now, lets keep it as it is and figure out a way to update the hash on
-// important updates
-export const SIDECAR_VERSION = 'a077b88a38143728bc3db94084ec56545f7071b8ae64383ef0c1b9895d74b5da';
+export function createUpdateURL(platform: string, quality: string): string {
+  return `https://aide-updates.codestory.ai/api/update/sidecar/${platform}/${quality}`;
+}
 
 async function checkCorrectVersionRunning(url: string): Promise<boolean> {
   try {
-    console.log('Sidecar-binary:Version check starting');
-    const response = await fetch(`${url}/api/version`);
-    const version = await response.json();
-    console.log('Sidecar-binary:Version check starting' + version);
-    return version.version_hash === SIDECAR_VERSION;
+    const currentVersionResponse = await fetch(`${url}/api/version`);
+    const currentVersion = await currentVersionResponse.json();
+    const updateUrl = createUpdateURL(process.platform, 'stable');
+    const latestVersionResponse = await fetch(updateUrl);
+    const latestVersion = await latestVersionResponse.json();
+    return currentVersion.package_version === latestVersion.package_version;
   } catch (e) {
     return false;
   }
 }
+
 
 export async function runCommand(cmd: string): Promise<[string, string | undefined]> {
   let stdout = '';
