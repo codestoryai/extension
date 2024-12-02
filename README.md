@@ -8,9 +8,15 @@
 ![Latest release](https://img.shields.io/github/v/release/codestoryai/extension?label=version)
 ![Discord Shield](https://discord.com/api/guilds/1138070673756004464/widget.png?style=shield)
 
-<p align="center">
-	<img src="./media/extension_final.mov" alt="SOTA SWE in action" />
-</p>
+<div align="center">
+  <a href="https://customer-usdtusoutmmf2q7n.cloudflarestream.com/b1848f183bd6884ea21c53d0a98224c8/watch" target="_blank" rel="noopener noreferrer">
+	  <img src="https://customer-usdtusoutmmf2q7n.cloudflarestream.com/b1848f183bd6884ea21c53d0a98224c8/thumbnails/thumbnail.jpg" alt="SOTA SWE in action" />
+  </a>
+</div>
+<div align="center">
+  Click preview to watch SOTA SWE in action
+</div>
+<br/>
 
 - **Agentic code editing** - SOTA SWE can complete complex tasks across your codebase in agentic fashion, taking multiple steps as necessary - starting from reading the right files from your codebase, making necessary changes in-place, and iterating on it's own work in case there are pending items or issues.
 - **Terminal command execution** - The agent can execute terminal commands on your behalf, and can also read the output of the command as part of it's decision making process.
@@ -39,6 +45,8 @@ npm run watch
 ```
 
 3. Open the repo in VSCode and press `F5` to start debugging.
+
+4. (Optional) if you'd like to run sidecar locally too, [follow the instructions here](https://github.com/codestoryai/sidecar/blob/main/HOW_TO_CONTRIBUTE.md).
 
 ## Feedback
 
