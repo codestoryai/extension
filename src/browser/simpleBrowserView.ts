@@ -156,6 +156,10 @@ export class SimpleBrowserView extends Disposable {
 						<button
 							title="${vscode.l10n.t("Open in browser")}"
 							class="open-external-button icon"><i class="codicon codicon-link-external"></i></button>
+
+					<button
+							title="${vscode.l10n.t("Inspector")}"
+							class="inspector-button icon"><i class="codicon codicon-compass"></i></button>
 					</nav>
 				</header>
 				<div class="content">

@@ -92,6 +92,7 @@ button:focus {
   height: 100%;
   display: flex;
   justify-content: center;
+  position: relative; /* Add this to contain the overlay */
 }
 
 iframe {
@@ -118,4 +119,30 @@ iframe {
 
 .iframe-focused.enable-focus-lock-indicator .iframe-focused-alert {
   display: block;
+}
+
+.inspector-mode iframe {
+  pointer-events: none;
+}
+
+.inspector-mode .inspector-button {
+  background: var(--vscode-toolbar-activeBackground);
+  color: var(--vscode-toolbar-activeForeground);
+}
+
+.inspector-overlay {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  cursor: crosshair;
+  z-index: 100;
+  pointer-events: auto; /* Ensure clicks reach the overlay */
+}
+
+.inspector-mode .inspector-overlay {
+  display: block;
+  top: 0; /* Position relative to .content */
 }

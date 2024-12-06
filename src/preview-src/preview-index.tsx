@@ -84,6 +84,19 @@ const forwardButton = header.querySelector<HTMLButtonElement>('.forward-button')
 const backButton = header.querySelector<HTMLButtonElement>('.back-button')!;
 const reloadButton = header.querySelector<HTMLButtonElement>('.reload-button')!;
 const openExternalButton = header.querySelector<HTMLButtonElement>('.open-external-button')!;
+const inspectorButton = header.querySelector<HTMLButtonElement>('.inspector-button')!;
+
+let isInspectorMode = false;
+let iframeReady = false;
+
+// Add more comprehensive iframe load handling
+browserIframe.addEventListener('load', () => {
+  console.log('Iframe load event fired');
+  setTimeout(() => {
+    iframeReady = true;
+    console.log('Iframe marked as ready');
+  }, 500); // Give it a small delay to ensure content is loaded
+});
 
 window.addEventListener('message', (e) => {
   switch (e.data.type) {
@@ -143,6 +156,13 @@ onceDocumentLoaded(() => {
     });
   });
 
+  // Add debug logging for inspector mode toggle
+  inspectorButton.addEventListener('click', () => {
+    isInspectorMode = !isInspectorMode;
+    console.log('Inspector mode toggled:', isInspectorMode);
+    document.body.classList.toggle('inspector-mode', isInspectorMode);
+  });
+
   reloadButton.addEventListener('click', () => {
     // This does not seem to trigger what we want
     // history.go(0);
@@ -153,6 +173,37 @@ onceDocumentLoaded(() => {
     navigateTo(input.value);
   });
 
+  // Add inspector overlay
+  const inspectorOverlay = document.createElement('div');
+  inspectorOverlay.className = 'inspector-overlay';
+  document.querySelector('.content')!.appendChild(inspectorOverlay);
+
+  inspectorOverlay.addEventListener('click', (e) => {
+    console.log('Overlay clicked:', { isInspectorMode, iframeReady });
+
+    if (!isInspectorMode || !iframeReady) {
+      console.log('Inspector not ready:', { isInspectorMode, iframeReady });
+      return;
+    }
+
+    const rect = browserIframe.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    console.log('Click coordinates:', { x, y, src: browserIframe.src });
+
+    vscode.postMessage({
+      type: 'inspectElement',
+      payload: {
+        coordinates: { x, y },
+        url: browserIframe.src
+      }
+    });
+
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
   navigateTo(settings.url);
   input.value = settings.url;
 
@@ -160,6 +211,8 @@ onceDocumentLoaded(() => {
 
   function navigateTo(rawUrl: string): void {
     try {
+      console.log('Navigating to:', rawUrl);
+      iframeReady = false; // Reset ready state when navigating
       const url = new URL(rawUrl);
 
       // Try to bust the cache for the iframe
