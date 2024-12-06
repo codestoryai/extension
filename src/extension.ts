@@ -16,6 +16,11 @@ import {
 import { sidecarUseSelfRun } from './utilities/sidecarUrl';
 import { getUniqueId } from './utilities/uniqueId';
 import { ProjectContext } from './utilities/workspaceContext';
+import { SimpleBrowserView } from './browser/simpleBrowserView';
+import { SimpleBrowserManager } from './browser/simpleBrowserManager';
+
+const openApiCommand = 'sota-swe.api.open';
+const showCommand = 'sota-swe.show-browser';
 
 export let SIDECAR_CLIENT: SideCarClient | null = null;
 
@@ -217,6 +222,35 @@ export async function activate(context: vscode.ExtensionContext) {
       panelProvider.updateState();
     })
   );
+
+  const manager = new SimpleBrowserManager(context.extensionUri);
+  context.subscriptions.push(manager);
+
+  context.subscriptions.push(vscode.window.registerWebviewPanelSerializer(SimpleBrowserView.viewType, {
+    deserializeWebviewPanel: async (panel, state) => {
+      manager.restore(panel, state);
+    }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand(showCommand, async (url?: string) => {
+    if (!url) {
+      url = await vscode.window.showInputBox({
+        placeHolder: vscode.l10n.t("https://example.com"),
+        prompt: vscode.l10n.t("Enter url to visit")
+      });
+    }
+
+    if (url) {
+      manager.show(url);
+    }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand(openApiCommand, (url: vscode.Uri, showOptions?: {
+    preserveFocus?: boolean;
+    viewColumn: vscode.ViewColumn;
+  }) => {
+    manager.show(url, showOptions);
+  }));
 }
 
 // This method is called when your extension is deactivated

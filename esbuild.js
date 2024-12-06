@@ -73,7 +73,42 @@ async function webview() {
   }
 }
 
+async function preview() {
+  const ctx = await esbuild.context({
+    entryPoints: ['src/preview-src/preview-index.tsx', 'src/preview-src/preview-main.css'],
+    bundle: true,
+    format: 'esm',
+    minify: production,
+    sourcemap: !production,
+    sourcesContent: false,
+    platform: 'browser',
+    outdir: 'dist',
+    jsx: 'automatic',
+    define: {
+      'process.env.NODE_ENV': production ? '"production"' : '"development"',
+      'process.env.IS_PRODUCTION': production ? 'true' : 'false',
+    },
+    // logLevel: 'silent',
+    plugins: [
+      //  copyFilesPlugin([{ from: './src/preview-src/icon.png', to: 'preview-icon.png' }]),
+      /* add to the end of plugins array */
+      esbuildProblemMatcherPlugin,
+    ],
+    loader: {
+      '.svg': 'file',
+      '.ttf': 'file',
+    },
+  });
+  if (watch) {
+    await ctx.watch();
+  } else {
+    await ctx.rebuild();
+    await ctx.dispose();
+  }
+}
+
 try {
+  preview();
   webview();
   extension();
 } catch (error) {

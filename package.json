@@ -42,22 +42,35 @@
   "contributes": {
     "commands": [
       {
+        "command": "sota-swe.show-browser",
+        "title": "Open browser",
+        "icon": "$(browser)",
+        "category": "SotaSWE"
+      },
+      {
         "command": "sota-swe.go-to-new-task",
         "title": "Start new task",
-        "icon": "$(add)"
+        "icon": "$(add)",
+        "category": "SotaSWE"
       },
       {
         "command": "sota-swe.go-to-settings",
         "title": "Show settings",
-        "icon": "$(settings-gear)"
+        "icon": "$(settings-gear)",
+        "category": "SotaSWE"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "sota-swe.go-to-settings",
+          "command": "sota-swe.show-browser",
           "when": "view == sota-swe-panel",
           "group": "navigation@2"
+        },
+        {
+          "command": "sota-swe.go-to-settings",
+          "when": "view == sota-swe-panel",
+          "group": "navigation@1"
         },
         {
           "command": "sota-swe.go-to-new-task",
@@ -160,7 +173,9 @@
     "openai": "^4.0.1",
     "posthog-node": "^3.1.1",
     "react": "^18.3.1",
+    "react-devtools-inline": "^6.0.1",
     "react-dom": "^18.3.1",
+    "react-is": "^19.0.0",
     "react-router-dom": "^6.28.0",
     "seti-file-icons": "^0.0.8",
     "shiki": "^1.23.1",
