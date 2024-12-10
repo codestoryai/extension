@@ -110,6 +110,7 @@ export class SimpleBrowserView extends Disposable {
   private getHtml(url: string) {
 
     const mainJs = this.extensionResourceUrl('dist', 'preview-index.js');
+    const serviceWorkerPath = this.extensionResourceUrl('dist', 'sw.js');
     const mainCss = this.extensionResourceUrl('dist', 'preview-main.css');
 
     const webview = this._webviewPanel.webview;
@@ -127,7 +128,7 @@ export class SimpleBrowserView extends Disposable {
 			<html>
 			<head>
 				<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src ${webview.cspSource}; font-src ${webview.cspSource}; img-src ${webview.cspSource} blob: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'wasm-unsafe-eval'; frame-src 'self' ${frameSrcs}; worker-src blob:;">
+        <meta http-equiv="Content-Security-Policy" content="default-src ${webview.cspSource}; font-src ${webview.cspSource}; img-src ${webview.cspSource} blob: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'; frame-src 'self' ${frameSrcs}; worker-src 'self' blob:;">
 				<meta id="simple-browser-settings" data-settings="${escapeAttribute(JSON.stringify({
       url: url,
     }))}">
@@ -166,7 +167,9 @@ export class SimpleBrowserView extends Disposable {
 					<iframe id="browser" sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe>
           <div id="root"></div>
 				</div>
-
+        <script nonce="${nonce}">
+          var serviceWorkerPath = "${serviceWorkerPath}";
+        </script>
 				<script src="${mainJs}" nonce="${nonce}"></script>
 			</body>
 			</html>`;

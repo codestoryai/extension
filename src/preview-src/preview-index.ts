@@ -2,54 +2,31 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-// @ts-ignore
-import { initialize } from 'react-devtools-inline/frontend';
-import { createRoot } from 'react-dom/client';
 import { onceDocumentLoaded } from './events';
-import * as React from 'react';
 
-/**
- * API exposed to webviews.
- *
- * @template StateType Type of the persisted state stored for the webview.
- */
-export interface WebviewApi<StateType> {
-  /**
-   * Post a message to the owner of the webview.
-   *
-   * @param message Data to post. Must be JSON serializable.
-   */
-  postMessage(message: unknown): void;
 
-  /**
-   * Get the persistent state stored for this webview.
-   *
-   * @return The current state or `undefined` if no state has been set.
-   */
-  getState(): StateType | undefined;
+declare const serviceWorkerPath: string;
 
-  /**
-   * Set the persistent state stored for this webview.
-   *
-   * @param newState New persisted state. This must be a JSON serializable object. Can be retrieved
-   * using {@link getState}.
-   *
-   * @return The new state.
-   */
-  setState<T extends StateType | undefined>(newState: T): T;
-}
+console.log('[sw]', 'mainJs origin: ', window.location.origin);
 
-declare global {
-  /**
-   * Acquire an instance of the webview API.
-   *
-   * This may only be called once in a webview's context. Attempting to call `acquireVsCodeApi` after it has already
-   * been called will throw an exception.
-   *
-   * @template StateType Type of the persisted state stored for the webview.
-   */
-  // tslint:disable-next-line:no-unnecessary-generics
-  function acquireVsCodeApi<StateType = unknown>(): WebviewApi<StateType>;
+fetch('./sw.js')
+  .then((response) => response.text())
+  .then((text) => {
+    console.log('[sw] fetched sw.js', text);
+    const blob = new Blob([text], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(url);
+  });
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .register('./sw.js')
+    .then(function (registration) {
+      console.log('[sw] Service worker registered with scope:', registration.scope);
+    })
+    .catch(function (error) {
+      console.log('[sw] Service worker registration failed:', error);
+    });
 }
 
 const vscode = acquireVsCodeApi();
@@ -75,8 +52,6 @@ const rootDomNode = document.getElementById(rootNodeId);
 if (!rootDomNode) {
   throw new Error(`Root node with id '${rootNodeId} not found.`);
 }
-
-const root = createRoot(rootDomNode);
 
 const header = document.querySelector('.header')!;
 const input = header.querySelector<HTMLInputElement>('.url-input')!;
@@ -110,21 +85,6 @@ window.addEventListener('message', (e) => {
     }
   }
 });
-
-// Let the backend know to initialize itself.
-// We can't do this directly because the iframe is sandboxed.
-// Only initialize the backend once the DevTools frontend has been initialized.
-browserIframe.onload = () => {
-  const DevTools = initialize(browserIframe.contentWindow);
-  root.render(<DevTools />);
-
-  browserIframe.contentWindow!.postMessage(
-    {
-      type: 'activate-backend',
-    },
-    '*'
-  );
-};
 
 onceDocumentLoaded(() => {
   setInterval(() => {
@@ -196,8 +156,8 @@ onceDocumentLoaded(() => {
       type: 'inspectElement',
       payload: {
         coordinates: { x, y },
-        url: browserIframe.src
-      }
+        url: browserIframe.src,
+      },
     });
 
     e.preventDefault();
@@ -230,4 +190,48 @@ onceDocumentLoaded(() => {
 
 function toggleFocusLockIndicatorEnabled(enabled: boolean) {
   document.body.classList.toggle('enable-focus-lock-indicator', enabled);
+}
+
+/**
+ * API exposed to webviews.
+ *
+ * @template StateType Type of the persisted state stored for the webview.
+ */
+export interface WebviewApi<StateType> {
+  /**
+   * Post a message to the owner of the webview.
+   *
+   * @param message Data to post. Must be JSON serializable.
+   */
+  postMessage(message: unknown): void;
+
+  /**
+   * Get the persistent state stored for this webview.
+   *
+   * @return The current state or `undefined` if no state has been set.
+   */
+  getState(): StateType | undefined;
+
+  /**
+   * Set the persistent state stored for this webview.
+   *
+   * @param newState New persisted state. This must be a JSON serializable object. Can be retrieved
+   * using {@link getState}.
+   *
+   * @return The new state.
+   */
+  setState<T extends StateType | undefined>(newState: T): T;
+}
+
+declare global {
+  /**
+   * Acquire an instance of the webview API.
+   *
+   * This may only be called once in a webview's context. Attempting to call `acquireVsCodeApi` after it has already
+   * been called will throw an exception.
+   *
+   * @template StateType Type of the persisted state stored for the webview.
+   */
+  // tslint:disable-next-line:no-unnecessary-generics
+  function acquireVsCodeApi<StateType = unknown>(): WebviewApi<StateType>;
 }

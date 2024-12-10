@@ -75,7 +75,11 @@ async function webview() {
 
 async function preview() {
   const ctx = await esbuild.context({
-    entryPoints: ['src/preview-src/preview-index.tsx', 'src/preview-src/preview-main.css'],
+    entryPoints: [
+      'src/preview-src/preview-index.ts',
+      'src/preview-src/sw.js',
+      'src/preview-src/preview-main.css',
+    ],
     bundle: true,
     format: 'esm',
     minify: production,
@@ -83,6 +87,7 @@ async function preview() {
     sourcesContent: false,
     platform: 'browser',
     outdir: 'dist',
+    // external: ['./sw.js'],
     jsx: 'automatic',
     define: {
       'process.env.NODE_ENV': production ? '"production"' : '"development"',
