@@ -349,7 +349,7 @@ export enum Provider {
   OpenRouter = 'open-router',
   //GoogleGemini = 'google-gemini',
   //AWSBedrock = 'aws-bedrock',
-  //OpenAICompatible = 'open-ai-compatible',
+  OpenAICompatible = 'openai-compatible',
   //Ollama = 'ollama',
 }
 
