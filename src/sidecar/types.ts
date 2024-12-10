@@ -648,14 +648,14 @@ function getProviderConfiguration(type: Provider, value: ModelProviderConfigurat
 	//		'Ollama': {}
 	//	};
 	//}
-	//if (type === 'openai-compatible') {
-	//	return {
-	//		'OpenAICompatible': {
-	//			'api_key': value.apiKey,
-	//			'api_base': value.apiBase,
-	//		}
-	//	};
-	//}
+	if (type === 'openai-compatible') {
+		return {
+			'OpenAICompatible': {
+				'api_key': value.apiKey,
+				'api_base': value.apiBase,
+			}
+		};
+	}
 	//if (type === 'codestory') {
 	//	// if its codestory then we also want to provider the access token over here
 	//	return {
