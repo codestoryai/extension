@@ -1,6 +1,6 @@
 import ignore, { Ignore } from "ignore";
 import * as path from "node:path";
-import { FileType, IDE } from "..";
+import { FileType, IDE } from "../..";
 import {
     DEFAULT_IGNORE_DIRS,
     DEFAULT_IGNORE_FILETYPES,

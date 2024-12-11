@@ -1,8 +1,8 @@
 import { v4 } from 'uuid';
 import * as vscode from 'vscode';
 import { ContextItemId, ContextItemWithId } from '.';
-import FileContextProvider from './context/providers/FileContextProvider';
-import { IContextProvider } from './context/providers/types';
+import FileContextProvider from './core/context/providers/FileContextProvider';
+import { IContextProvider } from './core/context/providers/types';
 import { VSCodeIDE } from './ide';
 import {
   ClientRequest,
@@ -14,10 +14,10 @@ import {
   ToolTypeType,
   View,
 } from './model';
-import { SideCarClient } from './sidecar/client';
-import { getSideCarModelConfiguration } from './sidecar/types';
-import { TerminalManager } from './terminal/TerminalManager';
-import { getNonce } from './utilities/getNonce';
+import { SideCarClient } from './core/sidecar/client';
+import { getSideCarModelConfiguration } from './core/sidecar/types';
+import { TerminalManager } from './core/terminal/TerminalManager';
+import { getNonce } from './core/utilities/getNonce';
 
 const getDefaultTask = (activePreset: Preset) => ({
   query: '',

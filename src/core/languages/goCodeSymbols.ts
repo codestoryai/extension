@@ -9,7 +9,7 @@ import { v4 as uuidV4 } from 'uuid';
 import * as path from 'path';
 import { getSymbolsFromDocumentUsingLSP } from '../utilities/lspApi';
 import { CodeSymbolInformation } from '../utilities/types';
-import logger from '../logger';
+import logger from '../../logger';
 import { CodeSymbolsIndexer } from './codeSymbolsIndexerTypes';
 
 // This is the tree sitter parser we are using for parsing

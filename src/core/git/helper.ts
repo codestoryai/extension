@@ -7,7 +7,7 @@
 // and also the hash we are on
 // import logger from '../logger';
 import { execCommand, runCommandAsync } from '../utilities/commandRunner';
-import logger from '../logger';
+import logger from '../../logger';
 
 export const getGitRepoName = async (workingDirectory: string): Promise<string> => {
 	// Log the pwd here

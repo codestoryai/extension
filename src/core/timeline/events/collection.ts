@@ -12,7 +12,7 @@ import {
 } from '../../llm/recipe/prompts';
 import { EventType } from './type';
 import { writeFileContents } from '../../llm/recipe/helpers';
-import { AideAgentResponseStream } from '../../types';
+import { AideAgentResponseStream } from '../../../types';
 
 interface TestExecutionHarness {
 	testScript: string;

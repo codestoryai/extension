@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { ExtensionContext } from 'vscode';
-import { CheckpointState, DocumentsState, ChangesState, HealthState, HealthStatus } from '../types';
+import { CheckpointState, DocumentsState, ChangesState, HealthState, HealthStatus } from '../../types';
 
 const isEmpty = (value: Record<string, any>) => {
 	return Object.keys(value).length === 0;

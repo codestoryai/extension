@@ -12,7 +12,7 @@ import * as vscode from 'vscode';
 import { DiagnosticCode, DiagnosticInformationFromEditor, DiagnosticSeverity, InLineAgentAction, InLineAgentContextSelection, InLineAgentLLMType, InLineAgentMessage } from '../../sidecar/types';
 import { RepoRef, SideCarClient } from '../../sidecar/client';
 import { IndentStyle, IndentStyleSpaces, IndentationHelper } from './editorSessionProvider';
-import { AideAgentResponseStream } from '../../types';
+import { AideAgentResponseStream } from '../../../types';
 
 export interface EditMessage {
 	message: string | null;

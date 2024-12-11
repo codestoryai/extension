@@ -11,7 +11,7 @@ import { promisify } from 'util';
 import { ProgressLocation, window } from 'vscode';
 import { downloadFromGCPBucket, downloadUsingURL } from './gcpBucket';
 import { sidecarUseSelfRun } from './sidecarUrl';
-import { PanelProvider } from '../PanelProvider';
+import { PanelProvider } from '../../PanelProvider';
 
 // Here I want to ask a question about what value does the extracDir take
 // it should be pretty easy to do that

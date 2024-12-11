@@ -8,7 +8,7 @@ import { RepoRef, SideCarClient } from '../../sidecar/client';
 import { InEditorRequest, InLineAgentContextSelection } from '../../sidecar/types';
 import { parseDiagnosticsInformation, reportFromStreamToEditorSessionProgress } from './reportEditorSessionAnswerStream';
 import { shouldUseExactMatching } from '../../utilities/uniqueId';
-import { AideAgentRequest, AideAgentResponseStream } from '../../types';
+import { AideAgentRequest, AideAgentResponseStream } from '../../../types';
 
 export enum IndentStyle {
 	Tabs = 'tabs',

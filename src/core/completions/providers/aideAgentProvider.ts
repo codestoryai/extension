@@ -17,14 +17,14 @@ import { RepoRef } from '../../sidecar/client';
 import { getUniqueId } from '../../utilities/uniqueId';
 import { ProjectContext } from '../../utilities/workspaceContext';
 import postHogClient from '../../posthog/client';
-import { AideAgentMode, AideAgentPromptReference, AideAgentRequest, AideAgentResponseStream, AideAgentScope, AideSessionExchangeUserAction, AideSessionParticipant } from '../../types';
-import { SIDECAR_CLIENT } from '../../extension';
-import { PanelProvider } from '../../PanelProvider';
+import { AideAgentMode, AideAgentPromptReference, AideAgentRequest, AideAgentResponseStream, AideAgentScope, AideSessionExchangeUserAction, AideSessionParticipant } from '../../../types';
+import { SIDECAR_CLIENT } from '../../../extension';
+import { PanelProvider } from '../../../PanelProvider';
 import { TerminalManager } from '../../terminal/TerminalManager';
 import assert from 'assert';
 import { createFileIfNotExists } from '../../server/createFile';
 import { CancellationTokenSource } from 'vscode';
-import { AnthropicModels, ProviderType } from '../../model';
+import { AnthropicModels, ProviderType } from '../../../model';
 import { MockModelSelection } from '../../utilities/modelSelection';
 /**
  * Stores the necessary identifiers required for identifying a response stream

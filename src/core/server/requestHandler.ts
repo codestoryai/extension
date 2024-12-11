@@ -9,7 +9,7 @@ import { Position, Range } from 'vscode';
 import { getDiagnosticsFromEditor, getEnrichedDiagnostics, getFileDiagnosticsFromEditor, getFullWorkspaceDiagnostics, getHoverInformation } from './diagnostics';
 import { openFileEditor } from './openFile';
 import { goToDefinition } from './goToDefinition';
-import { SIDECAR_CLIENT } from '../extension';
+import { SIDECAR_CLIENT } from '../../extension';
 import { goToImplementation } from './goToImplementation';
 import { quickFixInvocation, quickFixList } from './quickFix';
 import { symbolSearch } from './symbolSearch';

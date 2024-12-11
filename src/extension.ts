@@ -1,23 +1,23 @@
 import { uniqueId } from 'lodash';
 import * as os from 'os';
 import * as vscode from 'vscode';
-import { AideAgentSessionProvider } from './completions/providers/aideAgentProvider';
+import { AideAgentSessionProvider } from './core/completions/providers/aideAgentProvider';
 import { PanelProvider } from './PanelProvider';
-import postHogClient from './posthog/client';
-import { RecentEditsRetriever } from './server/editedFiles';
-import { RepoRef, RepoRefBackend, SideCarClient } from './sidecar/client';
-import { TerminalManager } from './terminal/TerminalManager';
+import postHogClient from './core/posthog/client';
+import { RecentEditsRetriever } from './core/server/editedFiles';
+import { RepoRef, RepoRefBackend, SideCarClient } from './core/sidecar/client';
+import { TerminalManager } from './core/terminal/TerminalManager';
 import { AideAgentMode } from './types';
 import {
   checkOrKillRunningServer,
   getSidecarBinaryURL,
   startSidecarBinary,
-} from './utilities/setupSidecarBinary';
-import { sidecarUseSelfRun } from './utilities/sidecarUrl';
-import { getUniqueId } from './utilities/uniqueId';
-import { ProjectContext } from './utilities/workspaceContext';
-import { SimpleBrowserView } from './browser/simpleBrowserView';
-import { SimpleBrowserManager } from './browser/simpleBrowserManager';
+} from './core/utilities/setupSidecarBinary';
+import { sidecarUseSelfRun } from './core/utilities/sidecarUrl';
+import { getUniqueId } from './core/utilities/uniqueId';
+import { ProjectContext } from './core/utilities/workspaceContext';
+import { SimpleBrowserView } from './core/browser/simpleBrowserView';
+import { SimpleBrowserManager } from './core/browser/simpleBrowserManager';
 
 const openApiCommand = 'sota-swe.api.open';
 const showCommand = 'sota-swe.show-browser';

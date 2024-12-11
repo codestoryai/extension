@@ -55,7 +55,7 @@ import {
   AideAgentFileReference,
   AideAgentMode,
   AideAgentPromptReference,
-} from '../types';
+} from '../../types';
 
 export enum CompletionStopReason {
   /**

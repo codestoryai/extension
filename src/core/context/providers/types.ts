@@ -1,4 +1,4 @@
-import { IDE } from "../..";
+import { IDE } from "../../..";
 
 export type ContextItemUriTypes = "file" | "url";
 

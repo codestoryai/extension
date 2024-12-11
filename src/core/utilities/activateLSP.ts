@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 import { ExtensionContext, extensions } from 'vscode';
-import logger from '../logger';
+import logger from '../../logger';
 import { isExcludedExtension } from './extensionBlockList';
 
 

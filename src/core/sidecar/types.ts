@@ -5,7 +5,7 @@
 
 import { ModelProviderConfiguration, ModelSelection, ProviderSpecificConfiguration } from 'vscode';
 import { SidecarResponsePosition, UserContext } from '../server/types';
-import { Provider } from '../model';
+import { Provider } from '../../model';
 
 
 export type OptionString =
