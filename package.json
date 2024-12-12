@@ -111,7 +111,9 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\""
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
+    "prepare": "chmod +x scripts/codespace-setup.sh",
+    "postinstall": "if [ \"$CODESPACES\" = \"true\" ]; then ./scripts/codespace-setup.sh; fi"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
