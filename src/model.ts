@@ -6,7 +6,7 @@ export enum View {
   Preset = 'preset',
   Welcome = 'welcome',
   Settings = 'settings',
-  // History = 'history',
+  History = 'history', 
 }
 
 export type ViewType = `${View}`;
@@ -365,10 +365,10 @@ export type Exchange = Request | Response;
 
 export enum Provider {
   Anthropic = 'anthropic',
-  //OpenAI = 'open-ai',
+  OpenAI = 'openai',
   OpenRouter = 'open-router',
   //GoogleGemini = 'google-gemini',
-  //AWSBedrock = 'aws-bedrock',
+  AWSBedrock = 'aws-bedrock',
   OpenAICompatible = 'openai-compatible',
   //Ollama = 'ollama',
 }
@@ -379,7 +379,25 @@ export enum AnthropicModels {
   ClaudeOpus = 'ClaudeOpus',
 }
 
-export type Models = `${AnthropicModels}`;
+export enum OpenAIModels {
+  GPT4 = 'gpt-4',
+  GPT4Turbo = 'gpt-4-turbo-preview',
+  GPT35Turbo = 'gpt-3.5-turbo',
+  GPT4O = 'gpt-4o',
+  GPT4OMini = 'gpt-4o-mini',
+  O1Preview = 'o1-preview',
+  O1Mini = 'o1-mini'
+}
+
+export enum AWSBedrockModels {
+  Claude3Sonnet = 'anthropic.claude-3-sonnet-20240229-v1:0',
+  Claude3Haiku = 'anthropic.claude-3-haiku-20240307-v1:0',
+  Claude2 = 'anthropic.claude-v2:1',
+  Titan = 'amazon.titan-text-express-v1',
+  Llama2 = 'meta.llama2-70b-chat-v1',
+}
+
+export type Models = `${AnthropicModels}` | `${OpenAIModels}` | `${AWSBedrockModels}`;
 
 export enum PermissionState {
   Always = 'always',
