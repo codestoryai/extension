@@ -16,8 +16,8 @@ import {
 import { sidecarUseSelfRun } from './core/utilities/sidecarUrl';
 import { getUniqueId } from './core/utilities/uniqueId';
 import { ProjectContext } from './core/utilities/workspaceContext';
-import { SimpleBrowserView } from './core/browser/simpleBrowserView';
-import { SimpleBrowserManager } from './core/browser/simpleBrowserManager';
+import { SimpleBrowserView } from './browser/simpleBrowserView';
+import { SimpleBrowserManager } from './browser/simpleBrowserManager';
 import { startDevtools } from './devtools/react';
 
 const openApiCommand = 'sota-swe.api.open';

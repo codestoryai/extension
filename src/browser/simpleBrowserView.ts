@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { Disposable } from './dispose';
-import { getNonce } from '../utilities/getNonce';
+import { getNonce } from '../utils/getNonce';
 
 export interface ShowOptions {
   readonly preserveFocus?: boolean;
