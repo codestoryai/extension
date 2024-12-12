@@ -155,7 +155,7 @@ const PresetSchema = NewPresetSchema.extend({
 
 function parsePresetFormData(formData: FormData): Preset | NewPreset {
   const processed = processFormData(formData);
-  console.log({ processed });
+  // console.log({ processed });
 
   if (formData.has('id')) {
     return { type: 'preset', ...PresetSchema.parse(processed) };

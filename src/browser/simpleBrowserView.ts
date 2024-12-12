@@ -110,7 +110,7 @@ export class SimpleBrowserView extends Disposable {
   private getHtml(url: string) {
 
     const mainJs = this.extensionResourceUrl('dist', 'preview-index.js');
-    const serviceWorkerPath = this.extensionResourceUrl('dist', 'sw.js');
+    //const serviceWorkerPath = this.extensionResourceUrl('dist', 'sw.js');
     const mainCss = this.extensionResourceUrl('dist', 'preview-main.css');
 
     const webview = this._webviewPanel.webview;
@@ -167,13 +167,15 @@ export class SimpleBrowserView extends Disposable {
 					<iframe id="browser" sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe>
           <div id="root"></div>
 				</div>
-        <script nonce="${nonce}">
-          var serviceWorkerPath = "${serviceWorkerPath}";
-        </script>
+
 				<script src="${mainJs}" nonce="${nonce}"></script>
 			</body>
 			</html>`;
   }
+  // removed service worker
+  //  <script nonce="${nonce}">
+  //  var serviceWorkerPath = "${serviceWorkerPath}";
+  //</script>
 
   private extensionResourceUrl(...parts: string[]): vscode.Uri {
     return this._webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, ...parts));

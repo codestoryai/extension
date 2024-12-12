@@ -67,7 +67,6 @@ export function TaskView() {
 
   React.useEffect(() => {
     const exchangesContainer = exchangesContainerRef.current;
-    console.log({ userDidScroll });
     if (!userDidScroll && exchangesContainer) {
       exchangesContainer.scrollTop = exchangesContainer.scrollHeight;
     }
@@ -78,7 +77,7 @@ export function TaskView() {
   }
 
   function handleMessagesScroll(event: React.UIEvent<HTMLDivElement>) {
-    console.log({ userInitiatedScroll });
+    // console.log({ userInitiatedScroll });
     if (userInitiatedScroll) {
       const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
       const scrolledToBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 10;

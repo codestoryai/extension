@@ -51,7 +51,6 @@ async function copyDirectory(sourceDir, targetDir, options = {}) {
 
   // Use glob to get all files and directories except those starting with 'standalone.'
 
-  console.log(options.ignore);
   const items = await glob('**/*', {
     cwd: sourceDir,
     dot: true,

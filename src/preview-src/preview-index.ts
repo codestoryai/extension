@@ -7,9 +7,7 @@ import { onceDocumentLoaded } from './events';
 
 declare const serviceWorkerPath: string;
 
-console.log('[sw]', 'mainJs origin: ', window.location.origin);
-
-fetch('./sw.js')
+/*fetch('./sw.js')
   .then((response) => response.text())
   .then((text) => {
     console.log('[sw] fetched sw.js', text);
@@ -27,7 +25,7 @@ if ('serviceWorker' in navigator) {
     .catch(function (error) {
       console.log('[sw] Service worker registration failed:', error);
     });
-}
+}*/
 
 const vscode = acquireVsCodeApi();
 
@@ -46,7 +44,7 @@ function getSettings() {
 const settings = getSettings();
 
 const browserIframe = document.querySelector('iframe#browser') as HTMLIFrameElement;
-console.log('react app content window', browserIframe.contentWindow);
+
 const rootNodeId = 'root';
 const rootDomNode = document.getElementById(rootNodeId);
 if (!rootDomNode) {
@@ -66,10 +64,10 @@ let iframeReady = false;
 
 // Add more comprehensive iframe load handling
 browserIframe.addEventListener('load', () => {
-  console.log('Iframe load event fired');
+  //console.log('Iframe load event fired');
   setTimeout(() => {
     iframeReady = true;
-    console.log('Iframe marked as ready');
+    //console.log('Iframe marked as ready');
   }, 500); // Give it a small delay to ensure content is loaded
 });
 

@@ -19,6 +19,7 @@ import { ProjectContext } from './core/utilities/workspaceContext';
 import { SimpleBrowserView } from './browser/simpleBrowserView';
 import { SimpleBrowserManager } from './browser/simpleBrowserManager';
 import { startDevtools } from './devtools/react';
+import { proxy } from './proxy';
 
 const openApiCommand = 'sota-swe.api.open';
 const showCommand = 'sota-swe.show-browser';
@@ -39,6 +40,9 @@ Example flow:
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
+
+  proxy(5173);
+
   //const session = await vscode.csAuthentication.getSession();
   //const email = session?.account.email ?? '';
   postHogClient?.capture({
@@ -113,7 +117,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     panelProvider.onMessageFromWebview(async (message) => {
-      console.log('message from webview', message);
+      // console.log('message from webview', message);
       if (message.type === 'task-feedback') {
         try {
           // here we get the message from the user

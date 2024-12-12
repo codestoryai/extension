@@ -82,11 +82,7 @@ async function webview() {
 
 async function preview() {
   const ctx = await esbuild.context({
-    entryPoints: [
-      'src/preview-src/preview-index.ts',
-      'src/preview-src/sw.js',
-      'src/preview-src/preview-main.css',
-    ],
+    entryPoints: ['src/preview-src/preview-index.ts', 'src/preview-src/preview-main.css'],
     bundle: true,
     format: 'esm',
     minify: production,
