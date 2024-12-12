@@ -18,6 +18,10 @@ import { SideCarClient } from './sidecar/client';
 import { getSideCarModelConfiguration } from './sidecar/types';
 import { TerminalManager } from './terminal/TerminalManager';
 import { getNonce } from './webviews/utils/nonce';
+import { ChatStateManager } from './chatState/state';
+import { AideAgentMode, AideAgentPromptReference, AideAgentRequest } from './types';
+import { SideCarAgentEvent } from './server/types';
+import { RepoRef, RepoRefBackend } from './sidecar/client';
 
 const getDefaultTask = (activePreset: Preset) => ({
   query: '',
@@ -57,6 +61,7 @@ export class PanelProvider implements vscode.WebviewViewProvider {
   private sidecarClient: SideCarClient | undefined;
   private readonly _extensionUri: vscode.Uri;
   private ide: VSCodeIDE;
+  private _chatState: ChatStateManager;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -64,6 +69,7 @@ export class PanelProvider implements vscode.WebviewViewProvider {
   ) {
     this._extensionUri = context.extensionUri;
     this.ide = new VSCodeIDE();
+    this._chatState = new ChatStateManager();
 
     // const goToHistory = vscode.commands.registerCommand('sota-swe.go-to-history', () => {
     //   if (this._view) {
@@ -642,7 +648,27 @@ export class PanelProvider implements vscode.WebviewViewProvider {
       const exchangePossible = this._runningTask.exchanges.find((exchange) => {
         return exchange.exchangeId === exchangeId;
       }) as Response | undefined;
+
       if (exchangePossible && delta) {
+        // Convert context to AideAgentPromptReference[]
+        const references = (exchangePossible.context || []).map(ctx => ({
+          id: 'vscode.code',
+          value: {
+            uri: vscode.Uri.file(ctx),
+            range: new vscode.Range(0, 0, 0, 0)
+          }
+        })) as AideAgentPromptReference[];
+
+        // Add to chat state manager
+        this._chatState.addMessage({
+          role: 'assistant',
+          content: delta,
+          timestamp: Date.now(),
+          exchangeId,
+          mode: this._runningTask.preset.mode ?? AideAgentMode.Chat,
+          references
+        });
+
         exchangePossible.parts.push({
           type: 'markdown',
           rawMarkdown: delta,
@@ -657,6 +683,7 @@ export class PanelProvider implements vscode.WebviewViewProvider {
           view: View.Task,
           currentTask: this._runningTask,
           loadedTasks: new Map(),
+          chatContext: this._chatState.getCurrentContext()
         },
       });
     }
@@ -684,6 +711,10 @@ export class PanelProvider implements vscode.WebviewViewProvider {
   public createNewExchangeResponse(sessionId: string): string | undefined {
     if (this._runningTask && this._runningTask.sessionId === sessionId) {
       const exchangeId = v4();
+
+      // Start new exchange in chat state
+      this._chatState.startExchange(exchangeId, this._runningTask.preset.mode ?? AideAgentMode.Chat);
+
       this._runningTask.exchanges.push({
         type: 'response',
         parts: [],
@@ -700,6 +731,7 @@ export class PanelProvider implements vscode.WebviewViewProvider {
           view: View.Task,
           currentTask: this._runningTask,
           loadedTasks: new Map(),
+          chatContext: this._chatState.getCurrentContext()
         },
       });
       return exchangeId;
@@ -712,6 +744,20 @@ export class PanelProvider implements vscode.WebviewViewProvider {
       if (this._runningTask.query !== '') {
         this._runningTask.query = request;
       }
+
+      // Start new exchange in chat state
+      this._chatState.startExchange(exchangeId, this._runningTask.preset.mode ?? AideAgentMode.Chat);
+
+      // Add user message to chat state
+      this._chatState.addMessage({
+        role: 'user',
+        content: request,
+        timestamp: Date.now(),
+        exchangeId,
+        mode: this._runningTask.preset.mode ?? AideAgentMode.Chat,
+        references: []
+      });
+
       this._runningTask.exchanges.push({
         type: 'request',
         message: request,
@@ -728,8 +774,52 @@ export class PanelProvider implements vscode.WebviewViewProvider {
           view: View.Task,
           currentTask: this._runningTask,
           loadedTasks: new Map(),
+          chatContext: this._chatState.getCurrentContext()
         },
       });
+    }
+  }
+
+  public async handleChatRequest(request: AideAgentRequest) {
+    if (!this.sidecarClient || !this._runningTask) {
+      return;
+    }
+
+    const { prompt, sessionId, exchangeId, mode, references } = request;
+
+    if (mode === AideAgentMode.Chat) {
+      this._chatState.startExchange(exchangeId);
+
+      // Create RepoRef for the current workspace
+      const repoRef = new RepoRef(
+        vscode.workspace.rootPath || '',
+        RepoRefBackend.local
+      );
+
+      const stream = await this.sidecarClient.agentSessionChat(
+        prompt.text,
+        sessionId,
+        exchangeId,
+        'vscode://aide',  // editorUrl
+        mode,
+        references,
+        repoRef,
+        [],  // projectLabels
+        ''    // workosAccessToken - we'll need to get this from somewhere
+      );
+
+      // Handle streaming response
+      if (stream) {
+        for await (const event of stream) {
+          // Check for UI events with markdown content
+          if ('event' in event &&
+              'type' in event.event &&
+              event.event.type === 'markdown' &&
+              'content' in event.event) {
+            this.addChatMessage(sessionId, exchangeId, String(event.event.content));
+          }
+        }
+      }
     }
   }
 

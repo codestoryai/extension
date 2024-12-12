@@ -1,4 +1,5 @@
 import { ContextItemWithId, RangeInFile } from '.';
+import { AideAgentMode } from './types';
 
 export enum View {
   Task = 'task',
@@ -345,7 +346,7 @@ export type Exchange = Request | Response;
 
 export enum Provider {
   Anthropic = 'anthropic',
-  //OpenAI = 'open-ai',
+  OpenAI = 'open-ai',
   OpenRouter = 'open-router',
   //GoogleGemini = 'google-gemini',
   //AWSBedrock = 'aws-bedrock',
@@ -385,6 +386,7 @@ type BasePreset = {
   permissions: Permissions;
   customInstructions: string;
   name: string;
+  mode?: AideAgentMode;
 };
 
 export type Preset = BasePreset & {
