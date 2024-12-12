@@ -32,10 +32,35 @@ There are many ways in which you can participate in this project, for example:
 
 If you are interested in fixing issues and contributing directly to the code base,
 
+### System Requirements
+
+The extension requires the following system dependencies:
+- libssl3 (OpenSSL 3.0)
+
+These dependencies will be automatically installed when running in GitHub Codespaces. For local development:
+
+#### Ubuntu/Debian
+```shell
+# Add Ubuntu 22.04 repository for libssl3
+echo "deb http://archive.ubuntu.com/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/jammy.list
+sudo apt-get update
+sudo apt-get install -y libssl3
+```
+
+#### macOS
+```shell
+brew install openssl@3
+```
+
+#### Windows
+The required OpenSSL libraries are bundled with the Windows binary.
+
+### Development Setup
+
 1. Install dependencies
 
 ```shell
-  npm install
+npm install
 ```
 
 2. Run the extension in development mode with hot-reload
