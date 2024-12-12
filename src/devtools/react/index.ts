@@ -1,6 +1,6 @@
 import fs from 'fs';
 // @ts-expect-error external
-import Devtools from './dist/standalone.js';
+import Devtools from 'cs-react-devtools-core/standalone.js';
 
 export function startDevtools() {
   let options;

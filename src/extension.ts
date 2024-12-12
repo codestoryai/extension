@@ -18,7 +18,7 @@ import { getUniqueId } from './core/utilities/uniqueId';
 import { ProjectContext } from './core/utilities/workspaceContext';
 import { SimpleBrowserView } from './core/browser/simpleBrowserView';
 import { SimpleBrowserManager } from './core/browser/simpleBrowserManager';
-//import { startDevtools } from './devtools/react';
+import { startDevtools } from './devtools/react';
 
 const openApiCommand = 'sota-swe.api.open';
 const showCommand = 'sota-swe.show-browser';
@@ -92,7 +92,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('sota-swe-panel', panelProvider)
   );
 
-  // startDevtools();
+  startDevtools();
 
   console.log('extension:will start sidecar binary');
   // sidecar binary download in background
