@@ -16,8 +16,11 @@ import {
 import { sidecarUseSelfRun } from './utilities/sidecarUrl';
 import { getUniqueId } from './utilities/uniqueId';
 import { ProjectContext } from './utilities/workspaceContext';
+import { Exchange } from './model';
 
 export let SIDECAR_CLIENT: SideCarClient | null = null;
+
+const HISTORY_STORAGE_KEY = 'codestory.history';
 
 /**
 Extension → PanelProvider → Webview (app.tsx)
@@ -58,6 +61,25 @@ export async function activate(context: vscode.ExtensionContext) {
     // We assume the root-path is the one we are interested in
     rootPath,
     RepoRefBackend.local
+  );
+
+  // Register history-related commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codestory.saveHistory', async (exchanges: Exchange[]) => {
+      await context.globalState.update(HISTORY_STORAGE_KEY, exchanges);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codestory.loadHistory', async () => {
+      return context.globalState.get<Exchange[]>(HISTORY_STORAGE_KEY) || [];
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codestory.clearHistory', async () => {
+      await context.globalState.update(HISTORY_STORAGE_KEY, []);
+    })
   );
 
   // We also get some context about the workspace we are in and what we are
