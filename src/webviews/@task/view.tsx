@@ -52,6 +52,10 @@ export function TaskView() {
     const handleTerminalUpdates = (event: MessageEvent<Event>) => {
       if (event.data.type === 'task-terminals') {
         setTerminals(event.data.terminals);
+      } else if (event.data.type === 'followup-request') {
+        // Handle followup request
+        const { query, exchangeId, sessionId } = event.data;
+        task.sendRequest(query, sessionId, [], [], exchangeId);
       }
     };
 

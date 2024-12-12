@@ -15,6 +15,7 @@ import FileIcon from 'components/fileicon';
 import { TerminalPreview } from 'components/terminal-preview';
 import { Spinner } from 'components/spinner';
 import { AppState } from 'app';
+import { Button } from 'components/button';
 
 const toolTypesInfo: Record<ToolType, { label: string; codiconId: string }> = {
   [ToolType.AskFollowupQuestions]: { label: 'Follow up question', codiconId: 'comment-discussion' },
@@ -186,7 +187,22 @@ function OutputContent({ type, content }: { type: ToolTypeType; content: string 
 }
 
 export function ResponseViewItem(props: Response) {
-  const { parts, context } = props;
+  const { parts, context, exchangeId, sessionId } = props;
+  const [showFollowup, setShowFollowup] = React.useState(false);
+  const [followupText, setFollowupText] = React.useState('');
+
+  const handleFollowup = () => {
+    if (followupText.trim()) {
+      vscode.postMessage({
+        type: 'followup-request',
+        query: followupText,
+        exchangeId,
+        sessionId,
+      });
+      setFollowupText('');
+      setShowFollowup(false);
+    }
+  };
 
   return (
     <Exchange>
@@ -200,6 +216,50 @@ export function ResponseViewItem(props: Response) {
             </React.Fragment>
           ))}
         {context.length > 0 && <ContextSummary context={context} />}
+        <div className="mt-2 flex flex-col gap-2">
+          {!showFollowup ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowFollowup(true)}
+              className="w-fit"
+            >
+              <span className="codicon codicon-comment-discussion" />
+              Ask followup question
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <textarea
+                className="w-full rounded-xs border border-input-border bg-input-background p-2 text-sm text-foreground"
+                placeholder="Type your followup question..."
+                value={followupText}
+                onChange={(e) => setFollowupText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleFollowup();
+                  }
+                }}
+                rows={2}
+              />
+              <div className="flex gap-2">
+                <Button variant="primary" size="sm" onClick={handleFollowup}>
+                  Send
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowFollowup(false);
+                    setFollowupText('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </ExchangeContent>
     </Exchange>
   );

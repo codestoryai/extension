@@ -186,6 +186,13 @@ interface WorkspaceFolders {
   workspaceFolders?: WorkspaceFolder[];
 }
 
+interface FollowupRequest {
+  type: 'followup-request';
+  query: string;
+  exchangeId: string;
+  sessionId: string;
+}
+
 export type Event =
   | WorkspaceFolders
   | SidecarDownloading
@@ -200,7 +207,8 @@ export type Event =
   | TaskUpdate
   | SidecarReadyState
   | AddPresetResponse
-  | UpdatePresetResponse;
+  | UpdatePresetResponse
+  | FollowupRequest;
 
 export type NewSessionRequest = {
   type: 'new-request';
@@ -234,7 +242,6 @@ export type CommandGroupResponsePart = {
 
 export type ToolThinkingResponsePart = {
   type: 'toolThinking';
-  // this is the full tool thinking always
   markdown: MarkdownResponsePart;
 };
 
@@ -336,8 +343,8 @@ export interface Task {
   preset: Preset;
   responseOnGoing: boolean;
   cost: number;
-  usage: Usage; // metric, number of tokens
-  context: any[]; // temporary,
+  usage: Usage;
+  context: any[];
   exchanges: Exchange[];
   complete: boolean;
 }
@@ -348,10 +355,7 @@ export enum Provider {
   Anthropic = 'anthropic',
   OpenAI = 'open-ai',
   OpenRouter = 'open-router',
-  //GoogleGemini = 'google-gemini',
-  //AWSBedrock = 'aws-bedrock',
   OpenAICompatible = 'openai-compatible',
-  //Ollama = 'ollama',
 }
 
 export enum AnthropicModels {
@@ -365,7 +369,6 @@ export type Models = `${AnthropicModels}`;
 export enum PermissionState {
   Always = 'always',
   Ask = 'ask',
-  // Never = "never",
 }
 
 type PermissionStateType = `${PermissionState}`;
