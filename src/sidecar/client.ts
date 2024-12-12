@@ -1441,12 +1441,7 @@ export class SideCarClient {
     }
   }
 
-  /**
-   * Sends a request over to the sidecar and waits for an ack and completes after
-   * that. The sidecar can create a new exchange or many new exchanges as required
-   * and keep working on the exchange as and when required
-   */
-  async * agentSessionChat(
+  private async * streamOpenAIChat(
     query: string,
     sessionId: string,
     exchangeId: string,
@@ -1458,6 +1453,9 @@ export class SideCarClient {
     workosAccessToken: string
   ): AsyncIterableIterator<SideCarAgentEvent> {
     const baseUrl = new URL(this._url);
+    baseUrl.pathname = '/api/agentic/openai_stream';
+    const url = baseUrl.toString();
+
     const allFiles = vscode.workspace.textDocuments.map((textDocument) => {
       return textDocument.uri.fsPath;
     });
@@ -1468,9 +1466,7 @@ export class SideCarClient {
     const sideCarModelConfiguration = getSideCarModelConfiguration(
       MockModelSelection.getConfiguration()
     );
-    console.log('sideCarModelConfiguration', sideCarModelConfiguration);
-    baseUrl.pathname = '/api/agentic/agent_session_chat';
-    const url = baseUrl.toString();
+
     const body = {
       session_id: sessionId,
       exchange_id: exchangeId,
@@ -1489,7 +1485,94 @@ export class SideCarClient {
       shell: currentShell,
     };
 
-    // consider using headers
+    const headers = {
+      Authorization: `Bearer ${workosAccessToken}`,
+    };
+
+    const asyncIterableResponse = callServerEventStreamingBufferedPOST(url, body, headers);
+    for await (const line of asyncIterableResponse) {
+      const lineParts = line.split('data:{');
+      for (const lineSinglePart of lineParts) {
+        const lineSinglePartTrimmed = lineSinglePart.trim();
+        if (lineSinglePartTrimmed === '') {
+          continue;
+        }
+        const conversationMessage = JSON.parse('{' + lineSinglePartTrimmed) as SideCarAgentEvent;
+        yield conversationMessage;
+      }
+    }
+  }
+
+  /**
+   * Sends a request over to the sidecar and waits for an ack and completes after
+   * that. The sidecar can create a new exchange or many new exchanges as required
+   * and keep working on the exchange as and when required
+   */
+  async * agentSessionChat(
+    query: string,
+    sessionId: string,
+    exchangeId: string,
+    editorUrl: string,
+    agentMode: AideAgentMode,
+    variables: readonly vscode.ChatPromptReference[],
+    repoRef: RepoRef,
+    projectLabels: string[],
+    workosAccessToken: string
+  ): AsyncIterableIterator<SideCarAgentEvent> {
+    const sideCarModelConfiguration = getSideCarModelConfiguration(
+      MockModelSelection.getConfiguration()
+    );
+    console.log('sideCarModelConfiguration', sideCarModelConfiguration);
+
+    // Check for OpenAI provider in the providers array
+    const hasOpenAIProvider = sideCarModelConfiguration.providers.some(
+      provider => 'OpenAI' in provider
+    );
+
+    if (hasOpenAIProvider) {
+      return this.streamOpenAIChat(
+        query,
+        sessionId,
+        exchangeId,
+        editorUrl,
+        agentMode,
+        variables,
+        repoRef,
+        projectLabels,
+        workosAccessToken
+      );
+    }
+
+    const baseUrl = new URL(this._url);
+    baseUrl.pathname = '/api/agentic/agent_session_chat';
+    const url = baseUrl.toString();
+
+    const allFiles = vscode.workspace.textDocuments.map((textDocument) => {
+      return textDocument.uri.fsPath;
+    });
+    const openFiles = vscode.window.visibleTextEditors.map((textDocument) => {
+      return textDocument.document.uri.fsPath;
+    });
+    const currentShell = detectDefaultShell();
+
+    const body = {
+      session_id: sessionId,
+      exchange_id: exchangeId,
+      editor_url: editorUrl,
+      query,
+      user_context: await convertVSCodeVariableToSidecarHackingForPlan(variables, query),
+      agent_mode: agentMode.toString(),
+      repo_ref: repoRef.getRepresentation(),
+      project_labels: projectLabels,
+      root_directory: vscode.workspace.rootPath,
+      codebase_search: false,
+      access_token: workosAccessToken,
+      model_configuration: sideCarModelConfiguration,
+      all_files: allFiles,
+      open_files: openFiles,
+      shell: currentShell,
+    };
+
     const headers = {
       Authorization: `Bearer ${workosAccessToken}`,
     };
