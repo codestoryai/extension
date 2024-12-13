@@ -18,6 +18,7 @@ import { getUniqueId } from './core/utilities/uniqueId';
 import { ProjectContext } from './core/utilities/workspaceContext';
 import { SimpleBrowserView } from './browser/simpleBrowserView';
 import { SimpleBrowserManager } from './browser/simpleBrowserManager';
+import { findPortPosition } from './utils/port';
 
 const openApiCommand = 'sota-swe.api.open';
 const showCommand = 'sota-swe.show-browser';
@@ -234,10 +235,16 @@ export async function activate(context: vscode.ExtensionContext) {
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand(showCommand, async (url?: string) => {
+
+    const prefilledUrl = 'http://localhost:3000';
+    const portPosition = findPortPosition(prefilledUrl);
+
     if (!url) {
       url = await vscode.window.showInputBox({
-        placeHolder: vscode.l10n.t("https://example.com"),
-        prompt: vscode.l10n.t("Enter url to visit")
+        placeHolder: vscode.l10n.t("https://localhost:3000"),
+        value: prefilledUrl,
+        valueSelection: portPosition ? [portPosition.start, portPosition.end] : undefined,
+        prompt: vscode.l10n.t("Insert the url of your dev server")
       });
     }
 
