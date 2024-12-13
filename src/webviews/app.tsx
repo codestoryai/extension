@@ -7,13 +7,18 @@ import { ProgressIndicator } from 'components/progress-indicator';
 
 function reducer(state: AppStateType, action: Event) {
   if (action.type !== 'task-terminals') {
-    //console.log('action from extension', action);
+    console.log('action from extension', action);
   }
   const newState = structuredClone(state);
+
+  if (action.type === 'react-devtools-status') {
+    newState.reactDevtoolsReady = action.connected;
+  }
 
   if (action.type === 'initial-state') {
     newState.activePreset = action.initialAppState.activePreset;
     newState.currentTask = action.initialAppState.currentTask;
+    newState.reactDevtoolsReady = action.initialAppState.reactDevtoolsReady;
     return newState;
   }
 
@@ -39,6 +44,7 @@ function reducer(state: AppStateType, action: Event) {
 
 export const initialState: AppStateType = {
   extensionReady: false,
+  reactDevtoolsReady: false,
   isSidecarReady: false, // this is extra
   isSidecarDownloading: false,
 };

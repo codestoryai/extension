@@ -18,11 +18,8 @@ import { SideCarClient } from './core/sidecar/client';
 import { getSideCarModelConfiguration } from './core/sidecar/types';
 import { TerminalManager } from './core/terminal/TerminalManager';
 import { getNonce } from './utils/getNonce';
-// @ts-expect-error external
-import Devtools from 'cs-react-devtools-core/standalone.js';
-import { proxy } from './proxy';
+import { ReactDevtoolsManager } from './devtools/react/Manager';
 
-type DevtoolsStatus = 'server-connected' | 'devtools-connected' | 'error';
 
 const getDefaultTask = (activePreset: Preset) => ({
   query: '',
@@ -65,7 +62,8 @@ export class PanelProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly terminalManager: TerminalManager
+    private readonly terminalManager: TerminalManager,
+    private readonly reactDevtoolsManager: ReactDevtoolsManager
   ) {
     this._extensionUri = context.extensionUri;
     this.ide = new VSCodeIDE();
@@ -75,6 +73,18 @@ export class PanelProvider implements vscode.WebviewViewProvider {
     //     this._view.webview.postMessage({ type: 'open-view', view: View.History });
     //   }
     // });
+
+
+    this.reactDevtoolsManager.onStatusChange((status) => {
+      console.log('reactDevtoolsManager.onStatusChange', status, this._view);
+      if (!this._view) {
+        return;
+      }
+      this._view.webview.postMessage({
+        type: 'react-devtools-status',
+        connected: status === 'devtools-connected'
+      });
+    });
 
     const openNewTask = vscode.commands.registerCommand('sota-swe.go-to-new-task', () => {
       if (this._view) {
@@ -195,8 +205,6 @@ export class PanelProvider implements vscode.WebviewViewProvider {
             }
           }
 
-          console.log(data);
-
           if ((data.newSession || !this._runningTask) && activePreset) {
             this._runningTask = getDefaultTask(activePreset);
           }
@@ -215,6 +223,9 @@ export class PanelProvider implements vscode.WebviewViewProvider {
             })),
           });
           break;
+        }
+        case 'start-inspecting-host': {
+          this.reactDevtoolsManager.startInspectingHost();
         }
         case 'get-presets': {
           const activePresetId = this.context.globalState.get<string>('active-preset-id');
@@ -384,6 +395,7 @@ export class PanelProvider implements vscode.WebviewViewProvider {
         command: 'initial-state',
         initialAppState: {
           extensionReady: false,
+          reactDevtoolsReady: this.reactDevtoolsManager.status === 'devtools-connected',
           view: View.Preset,
         },
       });
@@ -399,6 +411,7 @@ export class PanelProvider implements vscode.WebviewViewProvider {
         command: 'initial-state',
         initialAppState: {
           extensionReady: false,
+          reactDevtoolsReady: this.reactDevtoolsManager.status === 'devtools-connected',
           activePreset,
           currentTask: this._runningTask,
         },
@@ -416,26 +429,6 @@ export class PanelProvider implements vscode.WebviewViewProvider {
         });
       }
     }
-
-
-    async function onDevtoolsStatusChange(_message: string, status: DevtoolsStatus) {
-      console.log('Devtools status changed', status);
-      if (status === 'server-connected') {
-        console.log('Devtools server connected', Devtools.currentPort);
-        const proxyPort = await proxy(5173, Devtools.currentPort);
-        console.log("Proxy server set up at ", proxyPort);
-      } else if (status === 'devtools-connected') {
-        console.log('Devtools connected');
-        webviewView.webview.postMessage({
-          type: 'react-devtools-connected',
-          view: View.Task,
-        });
-      }
-    }
-
-    Devtools
-      .setStatusListener(onDevtoolsStatusChange)
-      .startServer(8097, 'localhost');
   }
 
   public addToolNotFound(sessionId: string, exchangeId: string, output: string) {

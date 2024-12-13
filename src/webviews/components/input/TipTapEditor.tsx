@@ -11,7 +11,7 @@ import useUpdatingRef from 'hooks/useUpdatingRef';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSubmenuContext } from 'store/submenuContext';
 import { SimpleHTMLElementProps } from 'utils/types';
-import { ContextProviderDescription } from '../../../context/providers/types';
+import { ContextProviderDescription } from '../../../core/context/providers/types';
 import InputToolbar from './InputToolbar';
 import { Mention } from './MentionExtension';
 import { getContextProviderDropdownOptions } from './suggestions';
@@ -22,7 +22,9 @@ type TipTapEditorProps = SimpleHTMLElementProps<HTMLDivElement> & {
   onEnter: (editorState: JSONContent, editor: Editor) => void;
   onClear: () => void;
   onCancel: () => void;
+  onToggleDevtools: () => void;
   showCancelButton: boolean;
+  showDevtoolsButton: boolean;
 };
 
 function getDataUrlForFile(file: File, img: HTMLImageElement): string {
@@ -42,8 +44,16 @@ function getDataUrlForFile(file: File, img: HTMLImageElement): string {
 }
 
 const Tiptap = (props: TipTapEditorProps) => {
-  const { availableContextProviders, historyKey, onEnter, onClear, onCancel, showCancelButton } =
-    props;
+  const {
+    availableContextProviders,
+    historyKey,
+    onEnter,
+    onClear,
+    onCancel,
+    showCancelButton,
+    showDevtoolsButton,
+    onToggleDevtools,
+  } = props;
   const getSubmenuContextItems = useSubmenuContext((state) => state.getSubmenuContextItems);
   const availableContextProvidersRef = useUpdatingRef(availableContextProviders);
 
@@ -377,6 +387,8 @@ const Tiptap = (props: TipTapEditorProps) => {
         onClear={onClearRef.current}
         onCancel={onCancelRef.current}
         showCancelButton={showCancelButton}
+        onToggleDevtools={onToggleDevtools}
+        showDevtoolsButton={showDevtoolsButton}
       />
 
       {showDragOverMsg && (

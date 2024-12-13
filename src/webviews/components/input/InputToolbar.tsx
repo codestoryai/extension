@@ -9,6 +9,8 @@ interface InputToolbarProps {
   onClear: () => void;
   onCancel: () => void;
   showCancelButton: boolean;
+  onToggleDevtools: () => void;
+  showDevtoolsButton: boolean;
 }
 
 const PhotoIcon: React.FunctionComponent<React.SVGProps<SVGSVGElement>> = ImageIcon;
@@ -52,6 +54,18 @@ function InputToolbar(props: InputToolbarProps) {
           >
             <span className="p-0.5 text-sm">@</span>
           </div>
+          {props.showDevtoolsButton && (
+            <div
+              className="flex cursor-pointer items-center rounded text-foreground hover:bg-panel-background"
+              onClick={(e) => {
+                props.onToggleDevtools();
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <span className="text-disabled-foreground">⚛️</span>
+            </div>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-0.5 whitespace-nowrap text-gray-400">

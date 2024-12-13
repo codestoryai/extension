@@ -14,6 +14,7 @@ import { useTask } from './use-task';
 import { TerminalPreview } from 'components/terminal-preview';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { Spinner } from 'components/spinner';
+import { AppState } from 'app';
 
 export function TaskView() {
   const task = useTask();
@@ -22,6 +23,8 @@ export function TaskView() {
 
   const [showActions, setShowActions] = React.useState(false);
   const acceptButtonRef = React.useRef<HTMLButtonElement>(null);
+
+  const appState = React.useContext(AppState);
 
   React.useEffect(() => {
     if (showActions && acceptButtonRef.current) {
@@ -294,6 +297,12 @@ export function TaskView() {
             <Tiptap
               availableContextProviders={availableContextProviders ?? []}
               showCancelButton={!task.data?.task.complete}
+              showDevtoolsButton={appState.reactDevtoolsReady}
+              onToggleDevtools={() => {
+                vscode.postMessage({
+                  type: 'start-inspecting-host',
+                });
+              }}
               historyKey="chat"
               onEnter={async (editorState, editor) => {
                 const sessionId = task.data?.task.sessionId;

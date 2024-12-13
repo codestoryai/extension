@@ -96,6 +96,10 @@ interface CancelRequest {
   sessionId: string;
 }
 
+interface StartInspectingHost {
+  type: 'start-inspecting-host';
+}
+
 export type ClientRequest =
   | CancelRequest
   | OpenTerminal
@@ -110,7 +114,8 @@ export type ClientRequest =
   | FetchContextProviders
   | LoadSubmenuItems
   | GetContextItems
-  | ShowToast;
+  | ShowToast
+  | StartInspectingHost;
 
 export interface PresetsLoaded {
   type: 'presets-loaded';
@@ -185,6 +190,11 @@ interface WorkspaceFolders {
   workspaceFolders?: WorkspaceFolder[];
 }
 
+interface ReactDevtoolsStatus {
+  type: 'react-devtools-status',
+  connected: boolean;
+}
+
 export type Event =
   | WorkspaceFolders
   | SidecarDownloading
@@ -199,7 +209,8 @@ export type Event =
   | TaskUpdate
   | SidecarReadyState
   | AddPresetResponse
-  | UpdatePresetResponse;
+  | UpdatePresetResponse
+  | ReactDevtoolsStatus
 
 export type NewSessionRequest = {
   type: 'new-request';
@@ -408,5 +419,6 @@ export interface AppState {
   isSidecarDownloading: boolean;
   currentTask?: Task;
   activePreset?: Preset;
+  reactDevtoolsReady: boolean;
   workspaceFolders?: WorkspaceFolder[];
 }

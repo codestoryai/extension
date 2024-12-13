@@ -19,6 +19,7 @@ import { ProjectContext } from './core/utilities/workspaceContext';
 import { SimpleBrowserView } from './browser/simpleBrowserView';
 import { SimpleBrowserManager } from './browser/simpleBrowserManager';
 import { findPortPosition } from './utils/port';
+import { ReactDevtoolsManager } from './devtools/react/Manager';
 
 const openApiCommand = 'sota-swe.api.open';
 const showCommand = 'sota-swe.show-browser';
@@ -55,7 +56,9 @@ export async function activate(context: vscode.ExtensionContext) {
   // Create a terminal manager instance
   const terminalManager = new TerminalManager();
 
-  const panelProvider = new PanelProvider(context, terminalManager);
+  const reactDevtoolsManager = new ReactDevtoolsManager();
+
+  const panelProvider = new PanelProvider(context, terminalManager, reactDevtoolsManager);
   let rootPath = vscode.workspace.rootPath;
   if (!rootPath) {
     rootPath = '';
@@ -249,7 +252,19 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     if (url) {
-      manager.show(url);
+      try {
+        const parsedUrl = new URL(url);
+        if (reactDevtoolsManager.status === 'server-connected') {
+          const proxyedPort = await reactDevtoolsManager.proxy(Number(parsedUrl.port));
+          const proxyedUrl = new URL(parsedUrl);
+          proxyedUrl.port = proxyedPort.toString();
+          manager.show(proxyedUrl.href);
+        } else {
+          console.error('Devtools are not ready');
+        }
+      } catch (err) {
+        vscode.window.showErrorMessage('The URL you provided is not valid');
+      }
     }
   }));
 
