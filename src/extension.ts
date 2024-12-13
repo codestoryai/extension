@@ -18,8 +18,6 @@ import { getUniqueId } from './core/utilities/uniqueId';
 import { ProjectContext } from './core/utilities/workspaceContext';
 import { SimpleBrowserView } from './browser/simpleBrowserView';
 import { SimpleBrowserManager } from './browser/simpleBrowserManager';
-import { startDevtools } from './devtools/react';
-import { proxy } from './proxy';
 
 const openApiCommand = 'sota-swe.api.open';
 const showCommand = 'sota-swe.show-browser';
@@ -40,8 +38,6 @@ Example flow:
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
-
-  proxy(5173);
 
   //const session = await vscode.csAuthentication.getSession();
   //const email = session?.account.email ?? '';
@@ -95,8 +91,6 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('sota-swe-panel', panelProvider)
   );
-
-  startDevtools();
 
   console.log('extension:will start sidecar binary');
   // sidecar binary download in background
