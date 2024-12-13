@@ -50,7 +50,9 @@ function startInterceptingDocument(proxy: httpProxy<http.IncomingMessage, http.S
       const isPage = req.url && req.url.match(pageRegex);
 
       if (!isHtml || !isPage) {
-        pipeThrough(res, proxyRes);
+        const buffer = Buffer.concat(bodyChunks);
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        res.end(buffer);
         return;
       }
 
@@ -82,6 +84,8 @@ function startInterceptingDocument(proxy: httpProxy<http.IncomingMessage, http.S
       const modifiedBody = serialize(document);
 
       const headers = { ...proxyRes.headers };
+      delete headers['transfer-encoding'];
+      delete headers['content-encoding'];
       headers['content-length'] = Buffer.byteLength(modifiedBody).toString();
 
       (res as http.ServerResponse).writeHead(proxyRes.statusCode || 200, headers);
