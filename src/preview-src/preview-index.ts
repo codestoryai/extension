@@ -163,7 +163,7 @@ onceDocumentLoaded(() => {
   });
 
   navigateTo(settings.url);
-  input.value = settings.url;
+  input.value = settings.displayUrl || settings.url;
 
   toggleFocusLockIndicatorEnabled(settings.focusLockIndicatorEnabled);
 
@@ -182,7 +182,7 @@ onceDocumentLoaded(() => {
       browserIframe.src = rawUrl;
     }
 
-    vscode.setState({ url: rawUrl });
+    vscode.setState({ url: rawUrl, displayUrl: settings.displayUrl });
   }
 });
 

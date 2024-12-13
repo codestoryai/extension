@@ -9,6 +9,7 @@ import { getNonce } from '../utils/getNonce';
 
 export interface ShowOptions {
   readonly preserveFocus?: boolean;
+  readonly displayUrl?: string;
   readonly viewColumn?: vscode.ViewColumn;
 }
 
@@ -56,21 +57,24 @@ export class SimpleBrowserView extends Disposable {
       retainContextWhenHidden: true,
       ...SimpleBrowserView.getWebviewOptions(extensionUri)
     });
-    return new SimpleBrowserView(extensionUri, url, webview);
+    console.log('webview showoptions', showOptions);
+    return new SimpleBrowserView(extensionUri, url, webview, showOptions?.displayUrl);
   }
 
   public static restore(
     extensionUri: vscode.Uri,
     url: string,
     webviewPanel: vscode.WebviewPanel,
+    displayUrl?: string,
   ): SimpleBrowserView {
-    return new SimpleBrowserView(extensionUri, url, webviewPanel);
+    return new SimpleBrowserView(extensionUri, url, webviewPanel, displayUrl);
   }
 
   private constructor(
     private readonly extensionUri: vscode.Uri,
     url: string,
     webviewPanel: vscode.WebviewPanel,
+    private readonly displayUrl?: string,
   ) {
     super();
 
@@ -124,14 +128,17 @@ export class SimpleBrowserView extends Disposable {
       }
     }
 
+    const settingsData: Record<string, string> = { url };
+    if (this.displayUrl) {
+      settingsData.displayUrl = this.displayUrl;
+    }
+
     return /* html */ `<!DOCTYPE html>
 			<html>
 			<head>
 				<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
         <meta http-equiv="Content-Security-Policy" content="default-src ${webview.cspSource}; font-src ${webview.cspSource}; img-src ${webview.cspSource} blob: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'; frame-src 'self' ${frameSrcs}; worker-src 'self' blob:;">
-				<meta id="simple-browser-settings" data-settings="${escapeAttribute(JSON.stringify({
-      url: url,
-    }))}">
+				<meta id="simple-browser-settings" data-settings="${escapeAttribute(JSON.stringify(settingsData))}">
 
 				<link rel="stylesheet" type="text/css" href="${mainCss}">
 			</head>
