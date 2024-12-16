@@ -19,7 +19,7 @@ import { ProjectContext } from './core/utilities/workspaceContext';
 import { SimpleBrowserView } from './browser/simpleBrowserView';
 import { SimpleBrowserManager } from './browser/simpleBrowserManager';
 import { findPortPosition } from './utils/port';
-import { ReactDevtoolsManager } from './devtools/react/Manager';
+import { ReactDevtoolsManager } from './devtools/react/DevtoolsManager';
 
 const openApiCommand = 'sota-swe.api.open';
 const showCommand = 'sota-swe.show-browser';

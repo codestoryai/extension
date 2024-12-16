@@ -15,6 +15,7 @@ import { ContextProviderDescription } from '../../../core/context/providers/type
 import InputToolbar from './InputToolbar';
 import { Mention } from './MentionExtension';
 import { getContextProviderDropdownOptions } from './suggestions';
+import { InspectedElementPayload } from '../../../devtools/react/types';
 
 type TipTapEditorProps = SimpleHTMLElementProps<HTMLDivElement> & {
   availableContextProviders: ContextProviderDescription[];
@@ -262,6 +263,75 @@ const Tiptap = (props: TipTapEditorProps) => {
       editor.commands.focus('end');
     }
   }, [editor]);
+
+  const [devtoolsData, setDevtoolsData] = useState<{
+    inspectedElement: InspectedElementPayload;
+    uriType: 'invalid' | 'relative' | 'full';
+    name: string;
+  } | null>(null);
+
+  useEffect(() => {
+    function onInspectedElementChange(event: MessageEvent) {
+      const message = event.data;
+      if (message.type === 'react-devtools-inspected-element') {
+        setDevtoolsData(message);
+      }
+    }
+    window.addEventListener('message', onInspectedElementChange);
+    return () => {
+      window.removeEventListener('message', onInspectedElementChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (editor && devtoolsData) {
+      console.log('devtools data', devtoolsData);
+      if (devtoolsData.inspectedElement.type === 'full-data') {
+        const value = devtoolsData.inspectedElement.value;
+        const { doc } = editor.state;
+        const { state, dispatch } = editor.view;
+        const mentionType = state.schema.nodes.mention;
+
+        const newMentionData = {
+          label: devtoolsData.name,
+          description:
+            devtoolsData.uriType === 'full'
+              ? value.source!.sourceURL
+              : `Relative path of this file: ${value.source!.sourceURL}`,
+          id: value.source!.sourceURL,
+          itemType: devtoolsData.uriType === 'full' ? 'file' : 'relative-file',
+          query: value.source!.sourceURL,
+          providerType: devtoolsData.uriType === 'full' ? 'file' : 'relative-file',
+        };
+
+        let lastMentionPos = -1;
+        let lastMentionNodeSize = 0;
+
+        // Find the last mention node in the document
+        doc.descendants((node, pos) => {
+          if (node.type === mentionType) {
+            lastMentionPos = pos;
+            lastMentionNodeSize = node.nodeSize;
+          }
+        });
+
+        if (lastMentionPos !== -1) {
+          // We found a mention node, so replace it
+          const tr = state.tr.replaceWith(
+            lastMentionPos,
+            lastMentionPos + lastMentionNodeSize,
+            mentionType.create(newMentionData)
+          );
+          dispatch(tr);
+        } else {
+          // No mention node found, append at the end of the document
+          const endPos = doc.content.size;
+          const tr = state.tr.insert(endPos, mentionType.create(newMentionData));
+          dispatch(tr);
+        }
+      }
+    }
+  }, [editor, devtoolsData]);
 
   const onEnterRef = useUpdatingRef(() => {
     if (!editor) {

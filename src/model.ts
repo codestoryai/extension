@@ -1,4 +1,5 @@
 import { ContextItemWithId, RangeInFile } from '.';
+import { InspectedElementPayload } from './devtools/react/types';
 
 export enum View {
   Task = 'task',
@@ -195,6 +196,13 @@ interface ReactDevtoolsStatus {
   connected: boolean;
 }
 
+interface ReactDevtoolsInspectedElement {
+  type: 'react-devtools-inspected-element',
+  inspectedElement: InspectedElementPayload | null;
+  uriType: 'full' | 'relative' | 'invalid',
+  name: string
+}
+
 export type Event =
   | WorkspaceFolders
   | SidecarDownloading
@@ -211,6 +219,7 @@ export type Event =
   | AddPresetResponse
   | UpdatePresetResponse
   | ReactDevtoolsStatus
+  | ReactDevtoolsInspectedElement
 
 export type NewSessionRequest = {
   type: 'new-request';

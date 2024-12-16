@@ -47,9 +47,9 @@ async function resolveEditorContent(
 
   const fullInput = Array.isArray(parts)
     ? parts
-        .filter((p) => p.type === 'text')
-        .map((p) => p.text)
-        .join('\n')
+      .filter((p) => p.type === 'text')
+      .map((p) => p.text)
+      .join('\n')
     : parts;
 
   for (const item of contextItemAttrs) {

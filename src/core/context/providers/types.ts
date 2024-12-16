@@ -28,7 +28,7 @@ export interface LoadSubmenuItemsArgs {
     fetch: FetchFunction;
 }
 
-type ContextProviderName = "file" | "code";
+type ContextProviderName = "file" | "code" | "relative-file";
 type ContextProviderType = "normal" | "query" | "submenu";
 
 export interface ContextProviderDescription {

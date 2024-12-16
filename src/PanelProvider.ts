@@ -18,7 +18,10 @@ import { SideCarClient } from './core/sidecar/client';
 import { getSideCarModelConfiguration } from './core/sidecar/types';
 import { TerminalManager } from './core/terminal/TerminalManager';
 import { getNonce } from './utils/getNonce';
-import { ReactDevtoolsManager } from './devtools/react/Manager';
+import { checkIsValidFullPath, checkIsValidURL } from './utils/path';
+import { ReactDevtoolsManager } from './devtools/react/DevtoolsManager';
+import path from 'path';
+import RelativeFileContextProvider from './core/context/providers/RelativeFileContextProvider';
 
 
 const getDefaultTask = (activePreset: Preset) => ({
@@ -74,9 +77,35 @@ export class PanelProvider implements vscode.WebviewViewProvider {
     //   }
     // });
 
+    this.reactDevtoolsManager.onInspectedElementChange((payload) => {
+      if (this._view && payload.type === 'full-data') {
+        let uriType = 'invalid';
+        let name = 'React File Source';
+        if (payload.value.source) {
+          const source = payload.value.source;
+          if (checkIsValidFullPath(source.sourceURL)) {
+            uriType = 'full';
+            name = path.basename(source.sourceURL);
+          } else if (checkIsValidURL(source.sourceURL)) {
+            const url = new URL(source.sourceURL);
+            payload.value.source.sourceURL = url.pathname;
+            uriType = 'relative';
+            const lastPathName = url.pathname.split('/').pop();
+            if (lastPathName) {
+              name = lastPathName;
+            }
+          }
+        }
+        this._view.webview.postMessage({
+          type: 'react-devtools-inspected-element',
+          inspectedElement: payload,
+          uriType,
+          name
+        });
+      }
+    });
 
     this.reactDevtoolsManager.onStatusChange((status) => {
-      console.log('reactDevtoolsManager.onStatusChange', status, this._view);
       if (!this._view) {
         return;
       }
@@ -179,7 +208,7 @@ export class PanelProvider implements vscode.WebviewViewProvider {
     this._onDidWebviewBecomeVisible.fire();
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-    const providers: IContextProvider[] = [new FileContextProvider({})];
+    const providers: IContextProvider[] = [new FileContextProvider({}), new RelativeFileContextProvider({})];
 
     // Handle messages from the webview
     webviewView.webview.onDidReceiveMessage(async (data: ClientRequest) => {
@@ -347,6 +376,7 @@ export class PanelProvider implements vscode.WebviewViewProvider {
         case 'context/getContextItems': {
           const { name, query } = data;
           const provider = providers?.find((provider) => provider.description.title === name);
+
           if (!provider) {
             throw new Error(`Context provider '${name}' not found`);
           }
@@ -358,7 +388,6 @@ export class PanelProvider implements vscode.WebviewViewProvider {
             };
 
             const items = await provider.getContextItems(query, { ide: this.ide });
-
             const response: ContextItemWithId[] = items.map((item) => ({
               ...item,
               id,

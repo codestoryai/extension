@@ -327,6 +327,8 @@ export function TaskView() {
                       .filter((url): url is string => url !== undefined)
                   : [];
 
+                console.log({ selectedContextItems });
+
                 task.sendRequest(inputQuery, sessionId, selectedContextItems, base64Images);
 
                 // Clear the editor after sending
