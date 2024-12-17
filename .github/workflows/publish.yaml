@@ -1,27 +1,38 @@
 name: Publish Extension
 
 on:
+  # Stable releases: triggered by GitHub release events
   release:
     types: [released]
+
+  # Experimental builds: triggered by pushes to the experimental branch
+  push:
+    branches:
+      - experimental
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. Check-out repository
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # This ensures all tags are fetched
+          fetch-depth: 0
 
-      - name: Checkout tag
-        run: git checkout ${GITHUB_REF#refs/tags/}
+      # For stable releases, the ref is a tag; for experimental, it's a branch.
+      # We only need to checkout the specific ref when it's a release event.
+      - name: Checkout ref
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            git checkout ${GITHUB_REF#refs/tags/}
+          else
+            git checkout experimental
+          fi
 
       - name: Make sure version isn't odd
         run: |
           node scripts/versionCheck.js
 
-      # 2. Install npm dependencies
       - name: Use Node.js from .nvmrc
         uses: actions/setup-node@v4
         with:
@@ -34,25 +45,29 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
 
       - name: Install Dependencies
-        run: |
-          npm ci
+        run: npm ci
 
-      # 3. Package the extension
+      # If on the experimental branch, modify displayName in package.json
+      - name: Update extension name for Experimental release
+        if: ${{ github.ref_name == 'experimental' }}
+        run: |
+          sed -i 's/"displayName": "Your Extension Name"/"displayName": "Your Extension Name (Experimental)"/' package.json
+
       - name: Package the extension
         run: npx vsce package --no-dependencies
 
-      # 4. Upload the .vsix as an artifact
       - uses: actions/upload-artifact@v4
         with:
           name: extension
           path: '*.vsix'
 
   release:
+    # Stable release job
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    needs:
-      - build
+    needs: build
+    if: ${{ github.event_name == 'release' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,7 +77,6 @@ jobs:
           git config --local user.email "team@codestory.ai"
           git config --local user.name "CodeStory Team"
 
-      # Download the .vsix artifacts
       - uses: actions/download-artifact@v4
         with:
           pattern: '*extension'
@@ -73,18 +87,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: |
-            vsix-artifacts/*.vsix
+          files: vsix-artifacts/*.vsix
           repository: codestoryai/extension
 
   publish:
+    # Experimental publish job
     runs-on: ubuntu-latest
-    needs:
-      - build
+    needs: build
     permissions:
       contents: write
+    if: ${{ github.event_name == 'push' && github.ref_name == 'experimental' }}
     steps:
-      # 0. Setup git
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -93,25 +106,20 @@ jobs:
           git config --local user.email "team@codestory.ai"
           git config --local user.name "CodeStory Team"
 
-      - name: Pull latest changes from release
-        run: git fetch origin ${{ github.ref }} && git checkout ${{ github.ref }}
+      - name: Pull latest changes from experimental
+        run: git checkout experimental
 
-      # 1. Download the artifacts
       - uses: actions/download-artifact@v4
         with:
           pattern: '*extension'
           path: vsix-artifacts
           merge-multiple: true
 
-      # 2. Publish the extension to VS Code Marketplace
       - name: Publish to VS Code Marketplace
-        run: |
-          npx vsce publish --packagePath vsix-artifacts/*.vsix
+        run: npx vsce publish --packagePath vsix-artifacts/*.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_TOKEN }}
 
-      # 3. Publish the extension to Open VSX Registry
       - name: Publish (Open VSX Registry)
         continue-on-error: true
-        run: |
-          npx ovsx publish -p ${{ secrets.VSX_REGISTRY_TOKEN }} --packagePath vsix-artifacts/*.vsix
+        run: npx ovsx publish -p ${{ secrets.VSX_REGISTRY_TOKEN }} --packagePath vsix-artifacts/*.vsix
