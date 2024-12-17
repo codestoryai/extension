@@ -12,7 +12,7 @@ const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
 async function extension() {
-  await copyDirectory('../react/packages/react-devtools-core/dist', './dist', {
+  await copyDirectory('src/devtools/react/dist', './dist', {
     ignore: ['standalone.*'],
   });
 
