@@ -1,5 +1,5 @@
 // @ts-expect-error external
-import Devtools from 'cs-react-devtools-core/standalone.js';
+import Devtools from './dist/standalone.js';
 import * as vscode from 'vscode';
 import { proxy } from './proxy';
 import { DevtoolsStatus, InspectedElementPayload } from './types';
