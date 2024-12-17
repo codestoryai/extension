@@ -3,6 +3,9 @@ import tsParser from '@typescript-eslint/parser';
 
 export default [
   {
+    ignores: ['src/devtools/react/dist/**'],
+  },
+  {
     files: ['**/*.ts'],
   },
   {
