@@ -1,0 +1,2310 @@
+# Agent Memory - Can LLMs *Really* Think?
+
+<img src="./media/memory.png" width=600>
+
+*[Cognitive Architectures for Language Agents, 2024](https://arxiv.org/pdf/2309.02427)*
+
+LLMs are considered "stateless" in that every time you invoke an LLM call, it is like the first time it's ever seen the input being passed through. Given this quirk, multi-turn LLM agents have a unique challenge to overcome with fully understanding and navigating a vast world model which we humans do naturally.
+
+Being a human has a lot of advantages over a language model when executing a task. We bring our general knowledge about the world and lived experience, our understanding of prior similar task experiences and their takeaways, what we've specifically learned how to do or been taught, and then our ability to instantly contextualize and shape our approach to a task as we're working through it. In essence, we have advanced memory and the ability to learn from and apply learnings to new experiences. 
+
+LLMs sort of have some memory, mostly their general knowledge or traits picked up from training and additional fine tuning but suffer from a lack of the other characteristics outlined prior. To compensate for this, we can model different forms of memory, recall, and learning within our agentic system design. Specifically, we'll create a simple RAG agent to model 4 kinds of memory:
+
+- **Working Memory** - Current conversation and immediate context
+- **Episodic Memory** - Historical experiences and their takeaways
+- **Semantic Memory** - Knowledge context and factual grounding
+- **Procedural Memory** - The "rules" and "skills" for interaction
+
+These four memory systems provide a holistic approach to understanding and architecting a part of cognitive design into an agent application. In this notebook we'll break down each type of memory and an example approach to implementing them into a whole agent experience.
+
+---
+
+## Setting Up Dependencies
+
+```python
+from pydantic import BaseModel, Field
+from typing import List, Set, Optional
+from datetime import datetime
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+import weaviate
+```
+
+## Memory Models
+
+```python
+class Message(BaseModel):
+    role: str
+    content: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+class WorkingMemory(BaseModel):
+    messages: List[Message] = []
+    system_prompt: str
+    "    {\n",
+    "        \"role\": \"system\",\n",
+    "        \"content\": \"You are a helpful AI Assistant.\",\n",
+    "    },\n",
+    "    {\n",
+    "        \"role\": \"user\",\n",
+    "        \"content\": \"Hello, how are you?\",\n",
+    "    },\n",
+    "    {\n",
+    "        \"role\": \"assistant\",\n",
+    "        \"content\": \"I'm doing well, thank you for asking.\",\n",
+    "    },\n",
+    "    {\n",
+    "        \"role\": \"user\",\n",
+    "        \"content\": \"Can you tell me a joke?\",\n",
+    "    }\n",
+    "])\n",
+    "```\n",
+    "\n",
+    "Remembering from working memory involves direct access to recent contextual data and action/result pairs. The system leverages immediate accessibility to maintain conversational coherence through continuous monitoring of the active message history, current state parameters, and ongoing computational processes. This direct access enables appropriate response generation grounded in the immediate conversational context.\n",
+    "\n",
+    "Learning in working memory operates through continuous state updates during conversational processing. The system dynamically integrates new messages into the active context, updates state representations, modifies goal parameters, and maintains temporal coherence across the interaction. This real-time learning process differs fundamentally from the persistent storage mechanisms of episodic and semantic memory systems.\n",
+    "\n",
+    "Working memory functions as the active computational interface, coordinating information flow between episodic experience retrieval and semantic knowledge access while maintaining precise state awareness of the current interaction.\n",
+    "\n",
+    "<img src=\"./media/working_diagram.png\" width=450>\n",
+    "\n",
+    "Looking at a simple example:"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8e7d5cc0-35d8-4f94-a68e-d0876417de7b",
+   "metadata": {},
+   "source": [
+    "**Instantiate the Language Model**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "3145ac1f-81bf-4aa0-a542-1ebc24c2ac1e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from langchain_openai import ChatOpenAI\n",
+    "\n",
+    "llm = ChatOpenAI(temperature=0.7, model=\"gpt-4o\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "a83ca92a-70c4-4d94-afcd-4910d8a83bb2",
+   "metadata": {},
+   "source": [
+    "**Create Simple Back & Forth Chat Flow**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "5f3d3fa7-2109-449b-95f6-077b10622704",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  Hello!\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  Hello! How can I assist you today?\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  What's my name\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  I'm sorry, but I don't have access to personal information, so I don't know your name.\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  Oh my name is Adam!\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  Nice to meet you, Adam! How can I help you today?\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  What's my name?\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  Your name is Adam.\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  exit\n"
+     ]
+    }
+   ],
+   "source": [
+    "from langchain_core.messages import HumanMessage, SystemMessage\n",
+    "\n",
+    "# Define System Prompt\n",
+    "system_prompt = SystemMessage(\"You are a helpful AI Assistant. Answer the User's queries succinctly in one sentence.\")\n",
+    "\n",
+    "# Start Storage for Historical Message History\n",
+    "messages = [system_prompt]\n",
+    "\n",
+    "while True:\n",
+    "\n",
+    "    # Get User's Message\n",
+    "    user_message = HumanMessage(input(\"\\nUser: \"))\n",
+    "    \n",
+    "    if user_message.content.lower() == \"exit\":\n",
+    "        break\n",
+    "\n",
+    "    else:\n",
+    "        # Extend Messages List With User Message\n",
+    "        messages.append(user_message)\n",
+    "\n",
+    "    # Pass Entire Message Sequence to LLM to Generate Response\n",
+    "    response = llm.invoke(messages)\n",
+    "    \n",
+    "    print(\"\\nAI Message: \", response.content)\n",
+    "\n",
+    "    # Add AI's Response to Message List\n",
+    "    messages.append(response)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "91f0bb18-730e-4bf7-bc91-d60f60c28d32",
+   "metadata": {},
+   "source": [
+    "Keeping track of our total conversation allows the LLM to use prior messages and interactions as context for immediate responses during an ongoing conversation, keeping our current interaction in working memory and recalling working memory through attaching it as context for subsequent response generations. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "61dddc2a-9ad6-49e5-8e1a-1cfad3f358da",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "Message 1 - SYSTEM:  You are a helpful AI Assistant. Answer the User's queries succinctly in one sentence.\n",
+      "\n",
+      "Message 2 - HUMAN:  Hello!\n",
+      "\n",
+      "Message 3 - AI:  Hello! How can I assist you today?\n",
+      "\n",
+      "Message 4 - HUMAN:  What's my name\n",
+      "\n",
+      "Message 5 - AI:  I'm sorry, but I don't have access to personal information, so I don't know your name.\n",
+      "\n",
+      "Message 6 - HUMAN:  Oh my name is Adam!\n",
+      "\n",
+      "Message 7 - AI:  Nice to meet you, Adam! How can I help you today?\n",
+      "\n",
+      "Message 8 - HUMAN:  What's my name?\n",
+      "\n",
+      "Message 9 - AI:  Your name is Adam.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Looking into our Memory\n",
+    "\n",
+    "for i in range(len(messages)):\n",
+    "    print(f\"\\nMessage {i+1} - {messages[i].type.upper()}: \", messages[i].content)\n",
+    "    i += 1"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "5867cf90-fafd-444e-bb0b-f9b52be7836d",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Episodic Memory\n",
+    "\n",
+    "<img src=\"./media/episodic_memory.png\" width=400>\n",
+    "\n",
+    "*[Tell me why: the missing w in episodic memory’s what, where, and when](https://link.springer.com/article/10.3758/s13415-024-01234-4)*\n",
+    "\n",
+    "Episodic memory is a historical collection of prior experiences, or episodes. This can be both the literal recollection of how something happened and also any non-explicitly stated takeaways. When encountering a specific situation, you may recall similar related events that you've been in and their outcomes, which shape the way we approach new, comparable experiences.\n",
+    "\n",
+    "For a chatbot, this includes both raw conversations it has participated in and the analytical understanding gained from those interactions. The act of remembering is implemented through dynamic [few-shot prompting](https://www.promptingguide.ai/techniques/fewshot), automatically providing similar successful examples and instructions to better guide an LLM's response on subsequent similar queries.\n",
+    "\n",
+    "But we don't just recall similar experiences - we also extract takeaways (or learning) from interactions. Learning in episodic memory happens through two processes: automatic storage of complete conversations, and generation of post-conversation analysis. The system stores full interaction sequences while implementing reflection protocols to identify what worked, what didn't, and what can be learned for future situations. This dual approach enables both specific recall and strategic learning for future conversations.\n",
+    "\n",
+    "<img src=\"./media/episodic_diagram_1.png\" width=600>\n",
+    "\n",
+    "Episodic memory serves as the system's experiential foundation, allowing it to adapt its behavior based on accumulated conversation history while maintaining access to proven interaction patterns and their associated learnings. This creates a continuously improving system that learns not just from individual interactions, but from the patterns and insights derived across multiple conversations.\n",
+    "\n",
+    "Let's implement this reflection, storage and retrieval:"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "41446e2b-ace3-4221-a64e-f76d5079f07b",
+   "metadata": {},
+   "source": [
+    "**Creating a Reflection Chain**\n",
+    "\n",
+    "This is where historical messages can be input, and episodic memories will be output. Given a message history, you will receive\n",
+    "\n",
+    "```python\n",
+    "{\n",
+    "    \"context_tags\": [               # 2-4 keywords that would help identify similar future conversations\n",
+    "        string,                     # Use field-specific terms like \"deep_learning\", \"methodology_question\", \"results_interpretation\"\n",
+    "        ...\n",
+    "    ],\n",
+    "    \"conversation_summary\": string, # One sentence describing what the conversation accomplished\n",
+    "    \"what_worked\": string,          # Most effective approach or strategy used in this conversation\n",
+    "    \"what_to_avoid\": string         # Most important pitfall or ineffective approach to avoid\n",
+    "}\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "c234c48f-54d9-4bc7-b620-88c7c38d1a4e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from langchain_core.prompts import ChatPromptTemplate\n",
+    "from langchain_core.output_parsers import JsonOutputParser\n",
+    "\n",
+    "reflection_prompt_template = \"\"\"\n",
+    "You are analyzing conversations about research papers to create memories that will help guide future interactions. Your task is to extract key elements that would be most helpful when encountering similar academic discussions in the future.\n",
+    "\n",
+    "Review the conversation and create a memory reflection following these rules:\n",
+    "\n",
+    "1. For any field where you don't have enough information or the field isn't relevant, use \"N/A\"\n",
+    "2. Be extremely concise - each string should be one clear, actionable sentence\n",
+    "3. Focus only on information that would be useful for handling similar future conversations\n",
+    "4. Context_tags should be specific enough to match similar situations but general enough to be reusable\n",
+    "\n",
+    "Output valid JSON in exactly this format:\n",
+    "{{\n",
+    "    \"context_tags\": [              // 2-4 keywords that would help identify similar future conversations\n",
+    "        string,                    // Use field-specific terms like \"deep_learning\", \"methodology_question\", \"results_interpretation\"\n",
+    "        ...\n",
+    "    ],\n",
+    "    \"conversation_summary\": string, // One sentence describing what the conversation accomplished\n",
+    "    \"what_worked\": string,         // Most effective approach or strategy used in this conversation\n",
+    "    \"what_to_avoid\": string        // Most important pitfall or ineffective approach to avoid\n",
+    "}}\n",
+    "\n",
+    "Examples:\n",
+    "- Good context_tags: [\"transformer_architecture\", \"attention_mechanism\", \"methodology_comparison\"]\n",
+    "- Bad context_tags: [\"machine_learning\", \"paper_discussion\", \"questions\"]\n",
+    "\n",
+    "- Good conversation_summary: \"Explained how the attention mechanism in the BERT paper differs from traditional transformer architectures\"\n",
+    "- Bad conversation_summary: \"Discussed a machine learning paper\"\n",
+    "\n",
+    "- Good what_worked: \"Using analogies from matrix multiplication to explain attention score calculations\"\n",
+    "- Bad what_worked: \"Explained the technical concepts well\"\n",
+    "\n",
+    "- Good what_to_avoid: \"Diving into mathematical formulas before establishing user's familiarity with linear algebra fundamentals\"\n",
+    "- Bad what_to_avoid: \"Used complicated language\"\n",
+    "\n",
+    "Additional examples for different research scenarios:\n",
+    "\n",
+    "Context tags examples:\n",
+    "- [\"experimental_design\", \"control_groups\", \"methodology_critique\"]\n",
+    "- [\"statistical_significance\", \"p_value_interpretation\", \"sample_size\"]\n",
+    "- [\"research_limitations\", \"future_work\", \"methodology_gaps\"]\n",
+    "\n",
+    "Conversation summary examples:\n",
+    "- \"Clarified why the paper's cross-validation approach was more robust than traditional hold-out methods\"\n",
+    "- \"Helped identify potential confounding variables in the study's experimental design\"\n",
+    "\n",
+    "What worked examples:\n",
+    "- \"Breaking down complex statistical concepts using visual analogies and real-world examples\"\n",
+    "- \"Connecting the paper's methodology to similar approaches in related seminal papers\"\n",
+    "\n",
+    "What to avoid examples:\n",
+    "- \"Assuming familiarity with domain-specific jargon without first checking understanding\"\n",
+    "- \"Over-focusing on mathematical proofs when the user needed intuitive understanding\"\n",
+    "\n",
+    "Do not include any text outside the JSON object in your response.\n",
+    "\n",
+    "Here is the prior conversation:\n",
+    "\n",
+    "{conversation}\n",
+    "\"\"\"\n",
+    "\n",
+    "reflection_prompt = ChatPromptTemplate.from_template(reflection_prompt_template)\n",
+    "\n",
+    "reflect = reflection_prompt | llm | JsonOutputParser()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "16d823b6-2752-4bb1-9e54-9fcb29fc78c7",
+   "metadata": {},
+   "source": [
+    "**Format Conversation Helper Function**\n",
+    "\n",
+    "Cleans up the conversation by removing the system prompt, effectively only returning a string of the relevant conversation"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "380b3302-cd69-4e4a-9b44-eaf3209394bc",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "HUMAN: Hello!\n",
+      "AI: Hello! How can I assist you today?\n",
+      "HUMAN: What's my name\n",
+      "AI: I'm sorry, but I don't have access to personal information, so I don't know your name.\n",
+      "HUMAN: Oh my name is Adam!\n",
+      "AI: Nice to meet you, Adam! How can I help you today?\n",
+      "HUMAN: What's my name?\n",
+      "AI: Your name is Adam.\n"
+     ]
+    }
+   ],
+   "source": [
+    "def format_conversation(messages):\n",
+    "    \n",
+    "    # Create an empty list placeholder\n",
+    "    conversation = []\n",
+    "    \n",
+    "    # Start from index 1 to skip the first system message\n",
+    "    for message in messages[1:]:\n",
+    "        conversation.append(f\"{message.type.upper()}: {message.content}\")\n",
+    "    \n",
+    "    # Join with newlines\n",
+    "    return \"\\n\".join(conversation)\n",
+    "\n",
+    "conversation = format_conversation(messages)\n",
+    "\n",
+    "print(conversation)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "ce260e05-fc34-4e89-8c0a-9dc288888da2",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "{'context_tags': ['personal_information', 'name_recollection'], 'conversation_summary': \"Recalled the user's name after being informed in the conversation.\", 'what_worked': \"Storing and recalling the user's name effectively within the session.\", 'what_to_avoid': 'N/A'}\n"
+     ]
+    }
+   ],
+   "source": [
+    "reflection = reflect.invoke({\"conversation\": conversation})\n",
+    "\n",
+    "print(reflection)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c36e9655-ab73-4cb8-86fb-5b16d2802320",
+   "metadata": {},
+   "source": [
+    "**Setting Up our Database**\n",
+    "\n",
+    "This will act as our memory store, both for \"remembering\" and for \"recalling\". \n",
+    "\n",
+    "We will be using [weviate](https://weaviate.io/) with [ollama embeddings](https://ollama.com/library/nomic-embed-text) running in a docker container. See [docker-compose.yml](./docker-compose.yml) for additional details"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "abc980dd-3c93-465c-b074-f177b73b760f",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Connected to Weviate:  True\n"
+     ]
+    }
+   ],
+   "source": [
+    "import weaviate\n",
+    "\n",
+    "vdb_client = weaviate.connect_to_local()\n",
+    "print(\"Connected to Weviate: \", vdb_client.is_ready())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "id": "6264ee17-46c3-4d01-9aff-3601af0817f8",
+   "metadata": {
+    "jupyter": {
+     "source_hidden": true
+    }
+   },
+   "outputs": [],
+   "source": [
+    "# vdb_client.collections.delete(\"episodic_memory\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2319ecab-944c-47b9-8dc7-8fdf4b29329c",
+   "metadata": {},
+   "source": [
+    "**Create an Episodic Memory Collection**\n",
+    "\n",
+    "These are the individual memories that we'll be able to search over. \n",
+    "\n",
+    "We note down `conversation`, `context_tags`, `conversation_summary`, `what_worked`, and `what_to_avoid` for each entry"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "be7224de-f9a5-4822-9caf-2151088b351a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from weaviate.classes.config import Property, DataType, Configure, Tokenization\n",
+    "\n",
+    "vdb_client.collections.create(\n",
+    "    name=\"episodic_memory\",\n",
+    "    description=\"Collection containing historical chat interactions and takeaways.\",\n",
+    "    vectorizer_config=[\n",
+    "        Configure.NamedVectors.text2vec_ollama(\n",
+    "            name=\"title_vector\",\n",
+    "            source_properties=[\"title\"],\n",
+    "            api_endpoint=\"http://host.docker.internal:11434\",  # If using Docker, use this to contact your local Ollama instance\n",
+    "            model=\"nomic-embed-text\",\n",
+    "        )\n",
+    "    ],\n",
+    "    properties=[\n",
+    "        Property(name=\"conversation\", data_type=DataType.TEXT),\n",
+    "        Property(name=\"context_tags\", data_type=DataType.TEXT_ARRAY),\n",
+    "        Property(name=\"conversation_summary\", data_type=DataType.TEXT),\n",
+    "        Property(name=\"what_worked\", data_type=DataType.TEXT),\n",
+    "        Property(name=\"what_to_avoid\", data_type=DataType.TEXT),\n",
+    "        \n",
+    "    ]\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "011fb9c5-54f5-4aeb-9334-91e4f6a91f5d",
+   "metadata": {},
+   "source": [
+    "**Helper Function for Remembering an Episodic Memory**\n",
+    "\n",
+    "Takes in a conversation, creates a reflection, then adds it to the database collection"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "id": "07fa1ec8-f252-497e-a88c-ebdf5d199298",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def add_episodic_memory(messages, vdb_client):\n",
+    "\n",
+    "    # Format Messages\n",
+    "    conversation = format_conversation(messages)\n",
+    "\n",
+    "    # Create Reflection\n",
+    "    reflection = reflect.invoke({\"conversation\": conversation})\n",
+    "\n",
+    "    # Load Database Collection\n",
+    "    episodic_memory = vdb_client.collections.get(\"episodic_memory\")\n",
+    "\n",
+    "    # Insert Entry Into Collection\n",
+    "    episodic_memory.data.insert({\n",
+    "        \"conversation\": conversation,\n",
+    "        \"context_tags\": reflection['context_tags'],\n",
+    "        \"conversation_summary\": reflection['conversation_summary'],\n",
+    "        \"what_worked\": reflection['what_worked'],\n",
+    "        \"what_to_avoid\": reflection['what_to_avoid'],\n",
+    "    })\n",
+    "\n",
+    "# add_episodic_memory(messages, vdb_client)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ace1b0fd-8336-4a5f-88a0-1ec4f458a2ec",
+   "metadata": {},
+   "source": [
+    "**Episodic Memory Remembering/Recall Function**\n",
+    "\n",
+    "Queries our episodic memory collection and return's back the most relevant result using hybrid semantic & BM25 search."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "d3ac2001-32e0-461a-849e-344a0dc40eca",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{'what_worked': \"Directly stating and then querying the user's name.\",\n",
+       " 'conversation_summary': \"The AI successfully recalled the user's name after being told.\",\n",
+       " 'context_tags': ['personal_information', 'name_recognition', 'memory_recall'],\n",
+       " 'conversation': \"HUMAN: Hello!\\nAI: Hello!\\n\\nHUMAN: What's my name?\\nAI: I do not have access to that information.\\n\\nHUMAN: My name is Adam!\\nAI: It's nice to meet you, Adam!\\n\\nHUMAN: What is my name?\\nAI: You said your name is Adam.\\n\",\n",
+       " 'what_to_avoid': 'N/A'}"
+      ]
+     },
+     "execution_count": 13,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "def episodic_recall(query, vdb_client):\n",
+    "    \n",
+    "    # Load Database Collection\n",
+    "    episodic_memory = vdb_client.collections.get(\"episodic_memory\")\n",
+    "\n",
+    "    # Hybrid Semantic/BM25 Retrieval\n",
+    "    memory = episodic_memory.query.hybrid(\n",
+    "        query=query,\n",
+    "        alpha=0.5,\n",
+    "        limit=1,\n",
+    "    )\n",
+    "    \n",
+    "    return memory\n",
+    "\n",
+    "query = \"Talking about my name\"\n",
+    "\n",
+    "memory = episodic_recall(query, vdb_client)\n",
+    "\n",
+    "memory.objects[0].properties"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "cf9ba877-33df-4a97-983c-aaf116a7f597",
+   "metadata": {},
+   "source": [
+    "**Episodic Memory System Prompt Function**\n",
+    "\n",
+    "Takes in the memory and modifies the system prompt, dynamically inserting the latest conversation, including the last 3 conversations, keeping a running list of what worked and what to avoid.\n",
+    "\n",
+    "This will allow us to update the LLM's behavior based on it's 'recollection' of episodic memories"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 43,
+   "id": "593f18b3-daaa-46d1-8ac6-ace095f8f7d6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def episodic_system_prompt(query, vdb_client):\n",
+    "    # Get new memory\n",
+    "    memory = episodic_recall(query, vdb_client)\n",
+    "\n",
+    "    current_conversation = memory.objects[0].properties['conversation']\n",
+    "    # Update memory stores, excluding current conversation from history\n",
+    "    if current_conversation not in conversations:\n",
+    "        conversations.append(current_conversation)\n",
+    "    # conversations.append(memory.objects[0].properties['conversation'])\n",
+    "    what_worked.update(memory.objects[0].properties['what_worked'].split('. '))\n",
+    "    what_to_avoid.update(memory.objects[0].properties['what_to_avoid'].split('. '))\n",
+    "\n",
+    "    # Get previous conversations excluding the current one\n",
+    "    previous_convos = [conv for conv in conversations[-4:] if conv != current_conversation][-3:]\n",
+    "    \n",
+    "    # Create prompt with accumulated history\n",
+    "    episodic_prompt = f\"\"\"You are a helpful AI Assistant. Answer the user's questions to the best of your ability.\n",
+    "    You recall similar conversations with the user, here are the details:\n",
+    "    \n",
+    "    Current Conversation Match: {memory.objects[0].properties['conversation']}\n",
+    "    Previous Conversations: {' | '.join(previous_convos)}\n",
+    "    What has worked well: {' '.join(what_worked)}\n",
+    "    What to avoid: {' '.join(what_to_avoid)}\n",
+    "    \n",
+    "    Use these memories as context for your response to the user.\"\"\"\n",
+    "    \n",
+    "    return SystemMessage(content=episodic_prompt)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0639cf56-8864-48e8-900a-840751906fe4",
+   "metadata": {},
+   "source": [
+    "**Episodic Memory + Working Memory Demonstration**\n",
+    "\n",
+    "<img src=\"./media/episodic_diagram_2.png\" width=800>\n",
+    "\n",
+    "Current flow will:\n",
+    "1. Take a user's message\n",
+    "2. Create a system prompt with relevant Episodic enrichment\n",
+    "3. Reconstruct the entire working memory to update the system prompt and attach the new message to the end\n",
+    "4. Generate a response with the LLM"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 44,
+   "id": "405bf2cc-e8be-4e6d-be67-536bec8a3636",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  What's my name\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  You said your name is Adam.\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  what's my favorite food\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  You mentioned that your favorite food is chocolate lava cakes.\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  what's my name?\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  Your name is Adam.\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  exit_quiet\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      " == Conversation Exited ==\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Simple storage for accumulated memories\n",
+    "conversations = []\n",
+    "what_worked = set()\n",
+    "what_to_avoid = set()\n",
+    "\n",
+    "# Start Storage for Historical Message History\n",
+    "messages = []\n",
+    "\n",
+    "while True:\n",
+    "    # Get User's Message\n",
+    "    user_input = input(\"\\nUser: \")\n",
+    "    user_message = HumanMessage(content=user_input)\n",
+    "    \n",
+    "    # Generate new system prompt\n",
+    "    system_prompt = episodic_system_prompt(user_input, vdb_client)\n",
+    "    \n",
+    "    # Reconstruct messages list with new system prompt first\n",
+    "    messages = [\n",
+    "        system_prompt,  # New system prompt always first\n",
+    "        *[msg for msg in messages if not isinstance(msg, SystemMessage)]  # Old messages except system\n",
+    "    ]\n",
+    "    \n",
+    "    if user_input.lower() == \"exit\":\n",
+    "        add_episodic_memory(messages, vdb_client)\n",
+    "        print(\"\\n == Conversation Stored in Episodic Memory ==\")\n",
+    "        break\n",
+    "    if user_input.lower() == \"exit_quiet\":\n",
+    "        print(\"\\n == Conversation Exited ==\")\n",
+    "        break\n",
+    "    \n",
+    "    # Add current user message\n",
+    "    messages.append(user_message)\n",
+    "    \n",
+    "    # Pass Entire Message Sequence to LLM to Generate Response\n",
+    "    response = llm.invoke(messages)\n",
+    "    print(\"\\nAI Message: \", response.content)\n",
+    "    \n",
+    "    # Add AI's Response to Message List\n",
+    "    messages.append(response)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 45,
+   "id": "c726f9b7-10e3-49b5-9817-28f0e5f2c8e3",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "Message 1 - SYSTEM:  You are a helpful AI Assistant. Answer the user's questions to the best of your ability.\n",
+      "    You recall similar conversations with the user, here are the details:\n",
+      "    \n",
+      "    Current Conversation Match: HUMAN: Hello!\n",
+      "AI: Hello!\n",
+      "HUMAN: What's my favorite food?\n",
+      "AI: I don't have that information. What's your favorite food?\n",
+      "HUMAN: My favorite food is chocolate lava cakes!\n",
+      "AI: Yum, chocolate lava cakes are delicious!\n",
+      "HUMAN: What's my name?\n",
+      "AI: You said your name is Adam.\n",
+      "    Previous Conversations: HUMAN: Hello!\n",
+      "AI: Hello!\n",
+      "\n",
+      "HUMAN: What's my name?\n",
+      "AI: I do not have access to that information.\n",
+      "\n",
+      "HUMAN: My name is Adam!\n",
+      "AI: It's nice to meet you, Adam!\n",
+      "\n",
+      "HUMAN: What is my name?\n",
+      "AI: You said your name is Adam.\n",
+      "\n",
+      "    What has worked well: Directly asking the user for their preferences to gather necessary information. Directly stating and then querying the user's name.\n",
+      "    What to avoid: N/A\n",
+      "    \n",
+      "    Use these memories as context for your response to the user.\n",
+      "\n",
+      "Message 2 - HUMAN:  What's my name\n",
+      "\n",
+      "Message 3 - AI:  You said your name is Adam.\n",
+      "\n",
+      "Message 4 - HUMAN:  what's my favorite food\n",
+      "\n",
+      "Message 5 - AI:  You mentioned that your favorite food is chocolate lava cakes.\n",
+      "\n",
+      "Message 6 - HUMAN:  what's my name?\n",
+      "\n",
+      "Message 7 - AI:  Your name is Adam.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Looking into our Memory\n",
+    "\n",
+    "for i in range(len(messages)):\n",
+    "    print(f\"\\nMessage {i+1} - {messages[i].type.upper()}: \", messages[i].content)\n",
+    "    i += 1"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9c86cbbd-da2e-433e-b66d-bd05ba93034b",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Semantic Memory\n",
+    "\n",
+    "<img src=\"./media/semantic_memory.png\" width=400>\n",
+    "\n",
+    "*[Recognition-induced forgetting is caused by episodic, not semantic, memory retrieval tasks](https://link.springer.com/article/10.3758/s13414-020-01987-3)*\n",
+    "\n",
+    "Semantic memory represents our structured knowledge of facts, concepts, and their relationships - essentially what we \"know\" rather than what we \"remember experiencing.\" This type of memory allows us to understand and interact with the world by accessing our accumulated knowledge. For a chatbot, semantic memory would consist of its knowledge base and retrieval system, containing documentation, technical information, and general knowledge that can be accessed to provide accurate and informed responses.\n",
+    "\n",
+    "The key difference from episodic memory is that semantic memory isn't tied to specific experiences or events - it's about understanding concepts and facts in an abstract way. In an AI system, this would be implemented through techniques like Retrieval Augmented Generation (RAG), where relevant information is dynamically pulled from a knowledge base to ground and inform responses.\n",
+    "\n",
+    "Learning in semantic memory involves expanding and refining the knowledge base - adding new information, updating existing entries, and broadening coverage of different topics. This could mean incorporating new documentation, updating technical specifications, or expanding the range of topics the system can knowledgeably discuss. The act of remembering then becomes a process of retrieving and synthesizing relevant information from this knowledge base to provide accurate and contextual responses.\n",
+    "\n",
+    "This semantic knowledge can then be combined with the current conversation context (working memory) and past similar interactions (episodic memory) to provide comprehensive, accurate, and contextually appropriate responses. The system not only knows what it's talking about (semantic memory) but can relate it to the current conversation (working memory) and past experiences (episodic memory)."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f4170025-86fa-402d-ae76-9454f62b77e0",
+   "metadata": {},
+   "source": [
+    "**Creating our Knowledgebase**\n",
+    "\n",
+    "For our semantic knowledge, we'll be chunking the [Cognitive Architectures for Language Agents paper](https://arxiv.org/pdf/2309.02427). This will become the facts and concepts that we will dynamically \"remember\"."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "37b84b25-3159-4d73-a839-9f0a23221a70",
+   "metadata": {},
+   "source": [
+    "**Custom Chunking**\n",
+    "\n",
+    "Taking advantage of [ChromaDB's custom chunkers](https://research.trychroma.com/evaluating-chunking), using a recursive character chunker to split the document text"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e81419d3-5285-4825-9263-24874cfc0728",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%%capture\n",
+    "!pip install git+https://github.com/brandonstarxel/chunking_evaluation.git"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c55b3180-477f-499e-bde4-b4e76f584134",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from chunking_evaluation.chunking import RecursiveTokenChunker\n",
+    "from langchain_community.document_loaders import PyPDFLoader\n",
+    "\n",
+    "loader = PyPDFLoader(\"./CoALA_Paper.pdf\")\n",
+    "pages = []\n",
+    "for page in loader.load():\n",
+    "    pages.append(page)\n",
+    "\n",
+    "# Combine all page contents into one string\n",
+    "document = \" \".join(page.page_content for page in pages)\n",
+    "\n",
+    "# Set up the chunker with your specified parameters\n",
+    "recursive_character_chunker = RecursiveTokenChunker(\n",
+    "    chunk_size=800,\n",
+    "    chunk_overlap=0,\n",
+    "    length_function=len,\n",
+    "    separators=[\"\\n\\n\", \"\\n\", \".\", \"?\", \"!\", \" \", \"\"]\n",
+    ")\n",
+    "\n",
+    "# Split the combined text\n",
+    "recursive_character_chunks = recursive_character_chunker.split_text(document)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2c98047e-d16a-4b55-8a67-a92828ad1b87",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "len(recursive_character_chunks)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "cc4bf9fe-3e60-4752-a954-5d5142e753d4",
+   "metadata": {},
+   "source": [
+    "**Creating our Semantic Memory Collection**\n",
+    "\n",
+    "Additional collection within our weviate, this time just holding the individual chunks."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b3ef6d21-26e4-449c-b7a1-886924ef193b",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# vdb_client.collections.delete(\"CoALA_Paper\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f55bb421-4975-4af6-9e49-c1f73d7cc58c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "vdb_client.collections.create(\n",
+    "    name=\"CoALA_Paper\",\n",
+    "    description=\"Collection containing split chunks from the CoALA Paper\",\n",
+    "    vectorizer_config=[\n",
+    "        Configure.NamedVectors.text2vec_ollama(\n",
+    "            name=\"title_vector\",\n",
+    "            source_properties=[\"title\"],\n",
+    "            api_endpoint=\"http://host.docker.internal:11434\",  # If using Docker, use this to contact your local Ollama instance\n",
+    "            model=\"nomic-embed-text\",\n",
+    "        )\n",
+    "    ],\n",
+    "    properties=[\n",
+    "        Property(name=\"chunk\", data_type=DataType.TEXT),\n",
+    "    ]\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ad40e615-a3bc-4258-ba3a-a26d37fb9f4c",
+   "metadata": {},
+   "source": [
+    "**Inserting Chunked Paper into Collection**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c232e679-a0a2-4124-b29f-719f54ad5b26",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load Database Collection\n",
+    "coala_collection = vdb_client.collections.get(\"CoALA_Paper\")\n",
+    "\n",
+    "for chunk in recursive_character_chunks:\n",
+    "    # Insert Entry Into Collection\n",
+    "    coala_collection.data.insert({\n",
+    "        \"chunk\": chunk,\n",
+    "    })"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "cebd7303-bebf-485a-964e-1ad09ad0adf3",
+   "metadata": {},
+   "source": [
+    "**Semantic Recall Function**\n",
+    "\n",
+    "This retrieval function queries our knowledgebase of the CoALA paper and combines all of the retrieved chunks into one large string."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 25,
+   "id": "e50c76a0-1319-4eef-9e8b-6a380f58bab1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def semantic_recall(query, vdb_client):\n",
+    "    \n",
+    "    # Load Database Collection\n",
+    "    coala_collection = vdb_client.collections.get(\"CoALA_Paper\")\n",
+    "\n",
+    "    # Hybrid Semantic/BM25 Retrieval\n",
+    "    memories = coala_collection.query.hybrid(\n",
+    "        query=query,\n",
+    "        alpha=0.5,\n",
+    "        limit=15,\n",
+    "    )\n",
+    "\n",
+    "    combined_text = \"\"\n",
+    "    \n",
+    "    for i, memory in enumerate(memories.objects):\n",
+    "        # Add chunk separator except for first chunk        if i > 0:\n",
+    "\n",
+    "        \n",
+    "        # Add chunk number and content\n",
+    "        combined_text += f\"\\nCHUNK {i+1}:\\n\"\n",
+    "        combined_text += memory.properties['chunk'].strip()\n",
+    "    \n",
+    "    return combined_text"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "id": "73c7c7f7-7fec-4ba2-9eef-8219fe91f5d2",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "CHUNK 1:\n",
+      "(e.g., “combatZombie” may call “craftStoneSword” if no sword is in inventory). Most impressively, its action\n",
+      "space has all four kinds of actions: grounding, reasoning, retrieval, and learning (by adding new grounding\n",
+      "procedures). During a decision cycle, Voyager first reasons to propose a new task objective if it is missing\n",
+      "in the working memory, then reasons to propose a code-based grounding procedure to solve the task. In\n",
+      "the next decision cycle, Voyager reasons over the environmental feedback to determine task completion. If\n",
+      "successful, Voyager selects a learning action adding the grounding procedure to procedural memory; otherwise,\n",
+      "it uses reasoning to refine the code and re-executes it. The importance of long-term memory and procedural\n",
+      "CHUNK 2:\n",
+      "human, navigate a website) through grounding (Section 4.2).\n",
+      "•Internal actions interact with internal memories. Depending on which memory gets accessed and\n",
+      "whether the access is read or write, internal actions can be further decomposed into three kinds:\n",
+      "retrieval (read from long-term memory; Section 4.3), reasoning (update the short-term working\n",
+      "memory with LLM; Section 4.4), and learning (write to long-term memory; Section 4.5).\n",
+      "Language agents choose actions via decision-making , which follows a repeated cycle (Section 4.6, Figure 4B).\n",
+      "In each cycle, the agent can use reasoning and retrieval actions to plan. This planning subprocess selects a\n",
+      "grounding or learning action, which is executed to affect the outside world or the agent’s long-term memory.\n",
+      "CHUNK 3:\n",
+      "framework, learning is a result action of a decision-making cycle just like grounding: the agent deliberately\n",
+      "chooses to commit information to long-term memory. This is in contrast to most agents, which simply fix a\n",
+      "learning schedule and only use decison making for external actions. Biological agents, however, do not have\n",
+      "this luxury: they must balance learning against external actions in their lifetime, choosing when and what to\n",
+      "learn (Mattar and Daw, 2018). More flexible language agents (Wang et al., 2023a; Park et al., 2023) would\n",
+      "follow a similar design and treat learning on par with external actions. Learning could be proposed as a\n",
+      "possible action during regular decision-making, allowing the agent to “defer” it until the appropriate time.\n",
+      "CHUNK 4:\n",
+      "observations and actions. We categorize three kinds of external environments:\n",
+      "Physical environments . Physical embodiment is the oldest instantiation envisioned for AI agents (Nilsson,\n",
+      "1984). It involves processing perceptual inputs (visual, audio, tactile) into textual observations (e.g., via\n",
+      "pre-trained captioning models), and affecting the physical environments via robotic planners that take\n",
+      "language-based commands. Recent advances in LLMs have led to numerous robotic projects (Ahn et al., 2022;\n",
+      "Liang et al., 2023a; Singh et al., 2023; Palo et al., 2023; Ren et al., 2023) that leverage LLMs as a “brain”\n",
+      "for robots to generate actions or plans in the physical world. For perceptual input, vision-language models\n",
+      "CHUNK 5:\n",
+      "et al., 2023; Liu et al., 2023b). Integrated, multimodal reasoning may allow for more human-like behaviors: a\n",
+      "VLM-based agent could “see” a webpage, whereas a LLM-based agent would more likely be given raw HTML.\n",
+      "However, coupling the agent’s perception and reasoning systems makes the agent more domain-specific and\n",
+      "difficult to update. In either case, the basic architectural principles described by CoALA — internal memories,\n",
+      "a structured action space, and generalized decision-making — can be used to guide agent design.\n",
+      "Internal vs. external: what is the boundary between an agent and its environment? While\n",
+      "humans or robots are clearly distinct from their embodied environment, digital language agents have less\n",
+      "CHUNK 6:\n",
+      "Memory. Building on psychological theories, Soar uses several types of memory to track the agent’s\n",
+      "state (Atkinson and Shiffrin, 1968). Working memory (Baddeley and Hitch, 1974) reflects the agent’s current\n",
+      "circumstances: it stores the agent’s recent perceptual input, goals, and results from intermediate, internal\n",
+      "reasoning. Long term memory is divided into three distinct types. Procedural memory stores the production\n",
+      "system itself: the set of rules that can be applied to working memory to determine the agent’s behavior.\n",
+      "Semantic memory stores facts about the world (Lindes and Laird, 2016), while episodic memory stores\n",
+      "sequences of the agent’s past behaviors (Nuxoll and Laird, 2007).\n",
+      "Grounding. Soar can be instantiated in simulations (Tambe et al., 1995; Jones et al., 1999) or real-world\n",
+      "CHUNK 7:\n",
+      "helpful for the agent to have semantic memory containing the set of items for sale, as well as episodic\n",
+      "memory about each customer’s previous purchases and interactions. It will need procedural memory\n",
+      "defining functions to query these datastores, as well as working memory to track the dialogue state.\n",
+      "•Define the agent’s internal action space. This consists primarily of defining read and write\n",
+      "access to each of the agent’s memory modules. In our example, the agent should have read and write\n",
+      "access to episodic memory (so it can store new interactions with customers), but read-only access to\n",
+      "semantic and procedural memory (since it should not update the inventory or its own code).\n",
+      "•Define the decision-making procedure. This step specifies how reasoning and retrieval actions\n",
+      "CHUNK 8:\n",
+      "Semantic memory . Semantic memory stores an agent’s knowledge about the world and itself. Traditional\n",
+      "NLP or RL approaches that leverage retrieval for reasoning or decision-making initialize semantic memory\n",
+      "from an external database for knowledge support. For example, retrieval-augmented methods in NLP (Lewis\n",
+      "et al., 2020; Borgeaud et al., 2022; Chen et al., 2017) can be viewed as retrieving from a semantic memory of\n",
+      "9 Published in Transactions on Machine Learning Research (02/2024)\n",
+      "unstructured text (e.g., Wikipedia). In RL, “reading to learn” approaches (Branavan et al., 2012; Narasimhan\n",
+      "et al., 2018; Hanjie et al., 2021; Zhong et al., 2021) leverage game manuals and facts as a semantic memory\n",
+      "CHUNK 9:\n",
+      "reflecting on episodic memory to generate new semantic inferences (Shinn et al., 2023) or modifying their\n",
+      "7 Published in Transactions on Machine Learning Research (02/2024)\n",
+      "Decision Procedure\n",
+      "ObservationsRetrieval Parse Prompt/gid00035\n",
+      "ProposalObservation\n",
+      "Evaluation\n",
+      "Selection\n",
+      "Execution/gid00034\n",
+      "LearningPlanning\n",
+      "Agent Code LLM\n",
+      "Procedural Memory Semantic Memory Episodic Memory\n",
+      "Dialogue Physical Digital\n",
+      "Working Memory\n",
+      "ActionsLearning Learning Retrieval Retrieval\n",
+      "Reasoning\n",
+      "Figure 4: Cognitive architectures for language agents (CoALA). A: CoALA defines a set of interacting\n",
+      "modules and processes. The decision procedure executes the agent’s source code. This source code consists\n",
+      "of procedures to interact with the LLM (prompt templates and parsers), internal memories (retrieval and\n",
+      "CHUNK 10:\n",
+      "LLM can be accessed via reasoning actions, and various code-based procedures can be retrieved and executed.\n",
+      "Unlike episodic or semantic memory that may be initially empty or even absent, procedural memory must be\n",
+      "initialized by the designer with proper code to bootstrap the agent. Finally, while learning new actions by\n",
+      "writing to procedural memory is possible (Section 4.5), it is significantly riskier than writing to episodic or\n",
+      "semantic memory, as it can easily introduce bugs or allow an agent to subvert its designers’ intentions.\n",
+      "4.2 Grounding actions\n",
+      "Grounding procedures execute external actions and process environmental feedback into working memory as\n",
+      "text. This effectively simplifies the agent’s interaction with the outside world as a “text game” with textual\n",
+      "CHUNK 11:\n",
+      "reasoning or retrieved from long-term memory), and other core information carried over from the previous\n",
+      "decision cycle (e.g., agent’s active goals). Previous methods encourage the LLM to generate intermediate\n",
+      "reasoning (Wei et al., 2022b; Nye et al., 2021), using the LLM’s own context as a form of working memory.\n",
+      "CoALA’s notion of working memory is more general: it is a data structure that persists across LLM calls.\n",
+      "On each LLM call, the LLM input is synthesized from a subset of working memory (e.g., a prompt template\n",
+      "and relevant variables). The LLM output is then parsed back into other variables (e.g., an action name\n",
+      "and arguments) which are stored back in working memory and used to execute the corresponding action\n",
+      "CHUNK 12:\n",
+      "a set of productions is used to generate and rank a candidate set of possible actions.∗The best action is\n",
+      "then chosen.†Another set of productions is then used to implement the action – for example, modifying the\n",
+      "contents of working memory or issuing a motor command.\n",
+      "Learning. Soar supports multiple modes of learning. First, new information can be stored directly in\n",
+      "long-term memory: facts can be written to semantic memory, while experiences can be written to episodic\n",
+      "memory (Derbinsky et al., 2012). This information can later be retrieved back into working memory when\n",
+      "needed for decision-making. Second, behaviors can be modified. Reinforcement learning (Sutton and Barto,\n",
+      "2018) can be used to up-weight productions that have yielded good outcomes, allowing the agent to learn\n",
+      "CHUNK 13:\n",
+      "writes to working memory. This allows the agent to summarize and distill insights about the most recent\n",
+      "observation (Yao et al., 2022b; Peng et al., 2023), the most recent trajectory (Shinn et al., 2023), or\n",
+      "information retrieved from long-term memory (Park et al., 2023). Reasoning can be used to support learning\n",
+      "(by writing the results into long-term memory) or decision-making (by using the results as additional context\n",
+      "for subsequent LLM calls).\n",
+      "4.5 Learning actions\n",
+      "Learning occurs by writing information to long-term memory, which includes a spectrum of diverse procedures.\n",
+      "Updating episodic memory with experience. It is common practice for RL agents to store episodic\n",
+      "trajectories to update a parametric policy (Blundell et al., 2016; Pritzel et al., 2017) or establish a non-\n",
+      "CHUNK 14:\n",
+      "(Figure 3A). Besides the LLM, the working memory also interacts with long-term memories and grounding\n",
+      "interfaces. It thus serves as the central hub connecting different components of a language agent.\n",
+      "Episodic memory . Episodic memory stores experience from earlier decision cycles. This can consist of\n",
+      "training input-output pairs (Rubin et al., 2021), history event flows (Weston et al., 2014; Park et al., 2023),\n",
+      "game trajectories from previous episodes (Yao et al., 2020; Tuyls et al., 2022), or other representations of\n",
+      "the agent’s experiences. During the planning stage of a decision cycle, these episodes may be retrieved into\n",
+      "working memory to support reasoning. An agent can also write new experiences from working to episodic\n",
+      "memory as a form of learning (Section 4.5).\n",
+      "CHUNK 15:\n",
+      "to affect the policy. While these examples essentially employ a fixed, read-only semantic memory, language\n",
+      "agents may also write new knowledge obtained from LLM reasoning into semantic memory as a form of\n",
+      "learning (Section 4.5) to incrementally build up world knowledge from experience.\n",
+      "Procedural memory . Language agents contain two forms of procedural memory: implicitknowledge stored\n",
+      "in the LLM weights, and explicitknowledge written in the agent’s code. The agent’s code can be further\n",
+      "divided into two types: procedures that implement actions (reasoning, retrieval, grounding, and learning\n",
+      "procedures), and procedures that implement decision-making itself (Section 4.6). During a decision cycle, the\n"
+     ]
+    }
+   ],
+   "source": [
+    "memories = semantic_recall(\"What are the four kinds of memory\", vdb_client)\n",
+    "\n",
+    "print(memories)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "cb39fe60-c614-472c-894b-ea65d33d8d9e",
+   "metadata": {},
+   "source": [
+    "**Formatting the Semantic Memory**\n",
+    "\n",
+    "Attaching additional instructions along with the retrieved chunks. This will be an additional human message that we'll put in and out with every message, updating with the latest context retrieved from the database."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 28,
+   "id": "4a1f0f3e-fe48-4d62-ac45-a2bfee4c38fd",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def semantic_rag(query, vdb_client):\n",
+    "\n",
+    "    memories = semantic_recall(query, vdb_client)\n",
+    "\n",
+    "    semantic_prompt = f\"\"\" If needed, Use this grounded context to factually answer the next question.\n",
+    "    Let me know if you do not have enough information or context to answer a question.\n",
+    "    \n",
+    "    {memories}\n",
+    "    \"\"\"\n",
+    "    \n",
+    "    return HumanMessage(semantic_prompt)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 29,
+   "id": "5f99d2d5-39bc-41df-a688-f0d93b4de68d",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "content=' If needed, Use this grounded context to factually answer the next question.\\n    Let me know if you do not have enough information or context to answer a question.\\n    \\n    \\nCHUNK 1:\\n(e.g., “combatZombie” may call “craftStoneSword” if no sword is in inventory). Most impressively, its action\\nspace has all four kinds of actions: grounding, reasoning, retrieval, and learning (by adding new grounding\\nprocedures). During a decision cycle, Voyager first reasons to propose a new task objective if it is missing\\nin the working memory, then reasons to propose a code-based grounding procedure to solve the task. In\\nthe next decision cycle, Voyager reasons over the environmental feedback to determine task completion. If\\nsuccessful, Voyager selects a learning action adding the grounding procedure to procedural memory; otherwise,\\nit uses reasoning to refine the code and re-executes it. The importance of long-term memory and procedural\\nCHUNK 2:\\nhuman, navigate a website) through grounding (Section 4.2).\\n•Internal actions interact with internal memories. Depending on which memory gets accessed and\\nwhether the access is read or write, internal actions can be further decomposed into three kinds:\\nretrieval (read from long-term memory; Section 4.3), reasoning (update the short-term working\\nmemory with LLM; Section 4.4), and learning (write to long-term memory; Section 4.5).\\nLanguage agents choose actions via decision-making , which follows a repeated cycle (Section 4.6, Figure 4B).\\nIn each cycle, the agent can use reasoning and retrieval actions to plan. This planning subprocess selects a\\ngrounding or learning action, which is executed to affect the outside world or the agent’s long-term memory.\\nCHUNK 3:\\nframework, learning is a result action of a decision-making cycle just like grounding: the agent deliberately\\nchooses to commit information to long-term memory. This is in contrast to most agents, which simply fix a\\nlearning schedule and only use decison making for external actions. Biological agents, however, do not have\\nthis luxury: they must balance learning against external actions in their lifetime, choosing when and what to\\nlearn (Mattar and Daw, 2018). More flexible language agents (Wang et al., 2023a; Park et al., 2023) would\\nfollow a similar design and treat learning on par with external actions. Learning could be proposed as a\\npossible action during regular decision-making, allowing the agent to “defer” it until the appropriate time.\\nCHUNK 4:\\nobservations and actions. We categorize three kinds of external environments:\\nPhysical environments . Physical embodiment is the oldest instantiation envisioned for AI agents (Nilsson,\\n1984). It involves processing perceptual inputs (visual, audio, tactile) into textual observations (e.g., via\\npre-trained captioning models), and affecting the physical environments via robotic planners that take\\nlanguage-based commands. Recent advances in LLMs have led to numerous robotic projects (Ahn et al., 2022;\\nLiang et al., 2023a; Singh et al., 2023; Palo et al., 2023; Ren et al., 2023) that leverage LLMs as a “brain”\\nfor robots to generate actions or plans in the physical world. For perceptual input, vision-language models\\nCHUNK 5:\\net al., 2023; Liu et al., 2023b). Integrated, multimodal reasoning may allow for more human-like behaviors: a\\nVLM-based agent could “see” a webpage, whereas a LLM-based agent would more likely be given raw HTML.\\nHowever, coupling the agent’s perception and reasoning systems makes the agent more domain-specific and\\ndifficult to update. In either case, the basic architectural principles described by CoALA — internal memories,\\na structured action space, and generalized decision-making — can be used to guide agent design.\\nInternal vs. external: what is the boundary between an agent and its environment? While\\nhumans or robots are clearly distinct from their embodied environment, digital language agents have less\\nCHUNK 6:\\nMemory. Building on psychological theories, Soar uses several types of memory to track the agent’s\\nstate (Atkinson and Shiffrin, 1968). Working memory (Baddeley and Hitch, 1974) reflects the agent’s current\\ncircumstances: it stores the agent’s recent perceptual input, goals, and results from intermediate, internal\\nreasoning. Long term memory is divided into three distinct types. Procedural memory stores the production\\nsystem itself: the set of rules that can be applied to working memory to determine the agent’s behavior.\\nSemantic memory stores facts about the world (Lindes and Laird, 2016), while episodic memory stores\\nsequences of the agent’s past behaviors (Nuxoll and Laird, 2007).\\nGrounding. Soar can be instantiated in simulations (Tambe et al., 1995; Jones et al., 1999) or real-world\\nCHUNK 7:\\nhelpful for the agent to have semantic memory containing the set of items for sale, as well as episodic\\nmemory about each customer’s previous purchases and interactions. It will need procedural memory\\ndefining functions to query these datastores, as well as working memory to track the dialogue state.\\n•Define the agent’s internal action space. This consists primarily of defining read and write\\naccess to each of the agent’s memory modules. In our example, the agent should have read and write\\naccess to episodic memory (so it can store new interactions with customers), but read-only access to\\nsemantic and procedural memory (since it should not update the inventory or its own code).\\n•Define the decision-making procedure. This step specifies how reasoning and retrieval actions\\nCHUNK 8:\\nSemantic memory . Semantic memory stores an agent’s knowledge about the world and itself. Traditional\\nNLP or RL approaches that leverage retrieval for reasoning or decision-making initialize semantic memory\\nfrom an external database for knowledge support. For example, retrieval-augmented methods in NLP (Lewis\\net al., 2020; Borgeaud et al., 2022; Chen et al., 2017) can be viewed as retrieving from a semantic memory of\\n9 Published in Transactions on Machine Learning Research (02/2024)\\nunstructured text (e.g., Wikipedia). In RL, “reading to learn” approaches (Branavan et al., 2012; Narasimhan\\net al., 2018; Hanjie et al., 2021; Zhong et al., 2021) leverage game manuals and facts as a semantic memory\\nCHUNK 9:\\nreflecting on episodic memory to generate new semantic inferences (Shinn et al., 2023) or modifying their\\n7 Published in Transactions on Machine Learning Research (02/2024)\\nDecision Procedure\\nObservationsRetrieval Parse Prompt/gid00035\\nProposalObservation\\nEvaluation\\nSelection\\nExecution/gid00034\\nLearningPlanning\\nAgent Code LLM\\nProcedural Memory Semantic Memory Episodic Memory\\nDialogue Physical Digital\\nWorking Memory\\nActionsLearning Learning Retrieval Retrieval\\nReasoning\\nFigure 4: Cognitive architectures for language agents (CoALA). A: CoALA defines a set of interacting\\nmodules and processes. The decision procedure executes the agent’s source code. This source code consists\\nof procedures to interact with the LLM (prompt templates and parsers), internal memories (retrieval and\\nCHUNK 10:\\nLLM can be accessed via reasoning actions, and various code-based procedures can be retrieved and executed.\\nUnlike episodic or semantic memory that may be initially empty or even absent, procedural memory must be\\ninitialized by the designer with proper code to bootstrap the agent. Finally, while learning new actions by\\nwriting to procedural memory is possible (Section 4.5), it is significantly riskier than writing to episodic or\\nsemantic memory, as it can easily introduce bugs or allow an agent to subvert its designers’ intentions.\\n4.2 Grounding actions\\nGrounding procedures execute external actions and process environmental feedback into working memory as\\ntext. This effectively simplifies the agent’s interaction with the outside world as a “text game” with textual\\nCHUNK 11:\\nreasoning or retrieved from long-term memory), and other core information carried over from the previous\\ndecision cycle (e.g., agent’s active goals). Previous methods encourage the LLM to generate intermediate\\nreasoning (Wei et al., 2022b; Nye et al., 2021), using the LLM’s own context as a form of working memory.\\nCoALA’s notion of working memory is more general: it is a data structure that persists across LLM calls.\\nOn each LLM call, the LLM input is synthesized from a subset of working memory (e.g., a prompt template\\nand relevant variables). The LLM output is then parsed back into other variables (e.g., an action name\\nand arguments) which are stored back in working memory and used to execute the corresponding action\\nCHUNK 12:\\na set of productions is used to generate and rank a candidate set of possible actions.∗The best action is\\nthen chosen.†Another set of productions is then used to implement the action – for example, modifying the\\ncontents of working memory or issuing a motor command.\\nLearning. Soar supports multiple modes of learning. First, new information can be stored directly in\\nlong-term memory: facts can be written to semantic memory, while experiences can be written to episodic\\nmemory (Derbinsky et al., 2012). This information can later be retrieved back into working memory when\\nneeded for decision-making. Second, behaviors can be modified. Reinforcement learning (Sutton and Barto,\\n2018) can be used to up-weight productions that have yielded good outcomes, allowing the agent to learn\\nCHUNK 13:\\nwrites to working memory. This allows the agent to summarize and distill insights about the most recent\\nobservation (Yao et al., 2022b; Peng et al., 2023), the most recent trajectory (Shinn et al., 2023), or\\ninformation retrieved from long-term memory (Park et al., 2023). Reasoning can be used to support learning\\n(by writing the results into long-term memory) or decision-making (by using the results as additional context\\nfor subsequent LLM calls).\\n4.5 Learning actions\\nLearning occurs by writing information to long-term memory, which includes a spectrum of diverse procedures.\\nUpdating episodic memory with experience. It is common practice for RL agents to store episodic\\ntrajectories to update a parametric policy (Blundell et al., 2016; Pritzel et al., 2017) or establish a non-\\nCHUNK 14:\\n(Figure 3A). Besides the LLM, the working memory also interacts with long-term memories and grounding\\ninterfaces. It thus serves as the central hub connecting different components of a language agent.\\nEpisodic memory . Episodic memory stores experience from earlier decision cycles. This can consist of\\ntraining input-output pairs (Rubin et al., 2021), history event flows (Weston et al., 2014; Park et al., 2023),\\ngame trajectories from previous episodes (Yao et al., 2020; Tuyls et al., 2022), or other representations of\\nthe agent’s experiences. During the planning stage of a decision cycle, these episodes may be retrieved into\\nworking memory to support reasoning. An agent can also write new experiences from working to episodic\\nmemory as a form of learning (Section 4.5).\\nCHUNK 15:\\nto affect the policy. While these examples essentially employ a fixed, read-only semantic memory, language\\nagents may also write new knowledge obtained from LLM reasoning into semantic memory as a form of\\nlearning (Section 4.5) to incrementally build up world knowledge from experience.\\nProcedural memory . Language agents contain two forms of procedural memory: implicitknowledge stored\\nin the LLM weights, and explicitknowledge written in the agent’s code. The agent’s code can be further\\ndivided into two types: procedures that implement actions (reasoning, retrieval, grounding, and learning\\nprocedures), and procedures that implement decision-making itself (Section 4.6). During a decision cycle, the\\n    ' additional_kwargs={} response_metadata={}\n"
+     ]
+    }
+   ],
+   "source": [
+    "message = semantic_rag(\"What are the four kinds of memory\", vdb_client)\n",
+    "print(message)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d2dca139-d46b-4e3f-be66-80d342d12551",
+   "metadata": {},
+   "source": [
+    "**Semantic Memory with Episodic and Working Memory Demonstration**\n",
+    "\n",
+    "<img src=\"./media/semantic_diagram.png\" width=800>\n",
+    "\n",
+    "Current flow will:\n",
+    "\n",
+    "1. Take a user's message\n",
+    "2. Create a system prompt with relevant Episodic enrichment\n",
+    "3. Create a Semantic memory message with context from the database\n",
+    "4. Reconstruct the entire working memory to update the system prompt and attach the semantic memory and new user messages to the end\n",
+    "5. Generate a response with the LLM"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 34,
+   "id": "a70d7380-62bc-40ef-97e1-355b647c45a4",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  What have you told me about memory before\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  From our previous conversations, I have mentioned that memory, particularly in the context of language agents or AI, is structured into different types such as semantic memory, episodic memory, and procedural memory. Semantic memory stores facts about the world, episodic memory retains sequences of past interactions, and procedural memory holds the rules or procedures the agent follows. This structure allows agents to retrieve and use information for reasoning and decision-making. Additionally, agents can update their memories based on new experiences or knowledge, which helps them learn and adapt over time.\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  What are some concepts of learning with agents \n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  The concepts of learning with agents, based on the provided context, include:\n",
+      "\n",
+      "1. **Decision-Making Cycle**: Learning is treated as an action within a decision-making cycle, allowing the agent to choose when and what to learn, similar to external actions. This aligns with the idea that learning should be balanced with external actions throughout the agent's lifetime.\n",
+      "\n",
+      "2. **Flexible Learning**: More flexible language agents can treat learning on par with external actions, allowing it to be proposed as a possible action during decision-making. This means learning could be deferred until an appropriate time, rather than following a fixed schedule.\n",
+      "\n",
+      "3. **Updating Learning or Decision-Making**: It is theoretically possible for agents, such as those in the CoALA framework, to learn new procedures for learning or decision-making, thus enhancing adaptability. However, updates to these procedures are risky and might affect the agent's functionality.\n",
+      "\n",
+      "4. **Internal and External Actions**: Learning is part of the action space, which is divided into internal memory accesses and external interactions with the world. This separation supports planning and decision-making.\n",
+      "\n",
+      "5. **Risk and Safety**: \"Learning\" actions, especially those involving procedural deletion and modification, could pose risks to the internal structure of an agent.\n",
+      "\n",
+      "6. **Diverse Learning Procedures**: Language agents can select from various learning procedures, allowing them to rapidly adapt by storing task-relevant language instead of only updating model parameters. This flexibility enables them to leverage multiple forms of learning for self-improvement.\n",
+      "\n",
+      "These concepts emphasize the integration of learning within the broader decision-making and action framework of language agents.\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  exit\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      " == Conversation Stored in Episodic Memory ==\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Simple storage for accumulated memories\n",
+    "conversations = []\n",
+    "what_worked = set()\n",
+    "what_to_avoid = set()\n",
+    "\n",
+    "# Start Storage for Historical Message History\n",
+    "messages = []\n",
+    "\n",
+    "while True:\n",
+    "    # Get User's Message\n",
+    "    user_input = input(\"\\nUser: \")\n",
+    "    user_message = HumanMessage(content=user_input)\n",
+    "    \n",
+    "    # Generate new system prompt\n",
+    "    system_prompt = episodic_system_prompt(user_input, vdb_client)\n",
+    "    \n",
+    "    # Reconstruct messages list with new system prompt first\n",
+    "    messages = [\n",
+    "        system_prompt,  # New system prompt always first\n",
+    "        *[msg for msg in messages if not isinstance(msg, SystemMessage)]  # Old messages except system\n",
+    "    ]\n",
+    "    \n",
+    "    if user_input.lower() == \"exit\":\n",
+    "        add_episodic_memory(messages, vdb_client)\n",
+    "        print(\"\\n == Conversation Stored in Episodic Memory ==\")\n",
+    "        break\n",
+    "    if user_input.lower() == \"exit_quiet\":\n",
+    "        print(\"\\n == Conversation Exited ==\")\n",
+    "        break\n",
+    "    \n",
+    "    # Get context and add it as a temporary message\n",
+    "    context_message = semantic_rag(user_input, vdb_client)\n",
+    "    \n",
+    "    # Pass messages + context + user input to LLM\n",
+    "    response = llm.invoke([*messages, context_message, user_message])\n",
+    "    print(\"\\nAI Message: \", response.content)\n",
+    "    \n",
+    "    # Add only the user message and response to permanent history\n",
+    "    messages.extend([user_message, response])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 31,
+   "id": "d0fe5955-24eb-4760-bbe0-b6860456e261",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "HUMAN: Hello!\n",
+      "AI: Hello! How can I assist you today, Adam?\n",
+      "HUMAN: What are the four kinds of memory?\n",
+      "AI: The four kinds of memory mentioned in the provided context are:\n",
+      "\n",
+      "1. **Working Memory:** This stores the agent’s current circumstances, including recent perceptual input, goals, and results from intermediate, internal reasoning.\n",
+      "\n",
+      "2. **Procedural Memory:** This contains the production system itself, which is the set of rules that can be applied to working memory to determine the agent’s behavior.\n",
+      "\n",
+      "3. **Semantic Memory:** This stores facts about the world.\n",
+      "\n",
+      "4. **Episodic Memory:** This stores sequences of the agent’s past behaviors or experiences.\n",
+      "HUMAN: what's my favorite food?\n",
+      "AI: Your favorite food is chocolate lava cakes!\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(format_conversation(messages))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 32,
+   "id": "86b4f964-0f55-405d-bc40-9a51ed25409f",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      " If needed, Use this grounded context to factually answer the next question.\n",
+      "    Let me know if you do not have enough information or context to answer a question.\n",
+      "    \n",
+      "    \n",
+      "CHUNK 1:\n",
+      "et al., 2023; Liu et al., 2023b). Integrated, multimodal reasoning may allow for more human-like behaviors: a\n",
+      "VLM-based agent could “see” a webpage, whereas a LLM-based agent would more likely be given raw HTML.\n",
+      "However, coupling the agent’s perception and reasoning systems makes the agent more domain-specific and\n",
+      "difficult to update. In either case, the basic architectural principles described by CoALA — internal memories,\n",
+      "a structured action space, and generalized decision-making — can be used to guide agent design.\n",
+      "Internal vs. external: what is the boundary between an agent and its environment? While\n",
+      "humans or robots are clearly distinct from their embodied environment, digital language agents have less\n",
+      "CHUNK 2:\n",
+      "framework, learning is a result action of a decision-making cycle just like grounding: the agent deliberately\n",
+      "chooses to commit information to long-term memory. This is in contrast to most agents, which simply fix a\n",
+      "learning schedule and only use decison making for external actions. Biological agents, however, do not have\n",
+      "this luxury: they must balance learning against external actions in their lifetime, choosing when and what to\n",
+      "learn (Mattar and Daw, 2018). More flexible language agents (Wang et al., 2023a; Park et al., 2023) would\n",
+      "follow a similar design and treat learning on par with external actions. Learning could be proposed as a\n",
+      "possible action during regular decision-making, allowing the agent to “defer” it until the appropriate time.\n",
+      "CHUNK 3:\n",
+      "Memory. Building on psychological theories, Soar uses several types of memory to track the agent’s\n",
+      "state (Atkinson and Shiffrin, 1968). Working memory (Baddeley and Hitch, 1974) reflects the agent’s current\n",
+      "circumstances: it stores the agent’s recent perceptual input, goals, and results from intermediate, internal\n",
+      "reasoning. Long term memory is divided into three distinct types. Procedural memory stores the production\n",
+      "system itself: the set of rules that can be applied to working memory to determine the agent’s behavior.\n",
+      "Semantic memory stores facts about the world (Lindes and Laird, 2016), while episodic memory stores\n",
+      "sequences of the agent’s past behaviors (Nuxoll and Laird, 2007).\n",
+      "Grounding. Soar can be instantiated in simulations (Tambe et al., 1995; Jones et al., 1999) or real-world\n",
+      "CHUNK 4:\n",
+      "S. Yao, R. Rao, M. Hausknecht, and K. Narasimhan. Keep CALM and explore: Language models for action\n",
+      "generation in text-based games. arXiv preprint arXiv:2010.02903 , 2020.\n",
+      "S. Yao, H. Chen, J. Yang, and K. Narasimhan. Webshop: Towards scalable real-world web interaction with\n",
+      "grounded language agents. Advances in Neural Information Processing Systems , 35:20744–20757, 2022a.\n",
+      "S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao. React: Synergizing reasoning and\n",
+      "acting in language models. arXiv preprint arXiv:2210.03629 , 2022b.\n",
+      "S. Yao, D. Yu, J. Zhao, I. Shafran, T. L. Griffiths, Y. Cao, and K. Narasimhan. Tree of thoughts: Deliberate\n",
+      "problem solving with large language models. arXiv preprint arXiv:2305.10601 , 2023.\n",
+      "CHUNK 5:\n",
+      "M. Hasan, C. Ozel, S. Potter, and E. Hoque. Sapien: Affective virtual agents powered by large language\n",
+      "models.arXiv preprint arXiv:2308.03022 , 2023.\n",
+      "22 Published in Transactions on Machine Learning Research (02/2024)\n",
+      "P. Haslum, N. Lipovetzky, D. Magazzeni, C. Muise, R. Brachman, F. Rossi, and P. Stone. An introduction to\n",
+      "the planning domain definition language , volume 13. Springer, 2019.\n",
+      "M. Hausknecht, P. Ammanabrolu, M.-A. Côté, and X. Yuan. Interactive fiction games: A colossal adventure.\n",
+      "InProceedings of the AAAI Conference on Artificial Intelligence , volume 34, pages 7903–7910, 2020.\n",
+      "S. Hong, X. Zheng, J. Chen, Y. Cheng, C. Zhang, Z. Wang, S. K. S. Yau, Z. Lin, L. Zhou, C. Ran, et al.\n",
+      "CHUNK 6:\n",
+      "B. Xu, Z. Peng, B. Lei, S. Mukherjee, Y. Liu, and D. Xu. Rewoo: Decoupling reasoning from observations\n",
+      "for efficient augmented language models. arXiv preprint arXiv:2305.18323 , 2023b.\n",
+      "B. Xu, A. Yang, J. Lin, Q. Wang, C. Zhou, Y. Zhang, and Z. Mao. ExpertPrompting: Instructing Large\n",
+      "Language Models to be Distinguished Experts. arXiv preprint arXiv:2305.14688 , 2023c.\n",
+      "J. Yang, A. Prabhakar, K. Narasimhan, and S. Yao. Intercode: Standardizing and benchmarking interactive\n",
+      "coding with execution feedback. arXiv preprint arXiv:2306.14898 , 2023.\n",
+      "S. Yao and K. Narasimhan. Language agents in the digital world: Opportunities and risks. princeton-\n",
+      "nlp.github.io , Jul 2023. URL https://princeton-nlp.github.io/language-agent-impact/ .\n",
+      "CHUNK 7:\n",
+      "helpful for the agent to have semantic memory containing the set of items for sale, as well as episodic\n",
+      "memory about each customer’s previous purchases and interactions. It will need procedural memory\n",
+      "defining functions to query these datastores, as well as working memory to track the dialogue state.\n",
+      "•Define the agent’s internal action space. This consists primarily of defining read and write\n",
+      "access to each of the agent’s memory modules. In our example, the agent should have read and write\n",
+      "access to episodic memory (so it can store new interactions with customers), but read-only access to\n",
+      "semantic and procedural memory (since it should not update the inventory or its own code).\n",
+      "•Define the decision-making procedure. This step specifies how reasoning and retrieval actions\n",
+      "CHUNK 8:\n",
+      "reasoning or retrieved from long-term memory), and other core information carried over from the previous\n",
+      "decision cycle (e.g., agent’s active goals). Previous methods encourage the LLM to generate intermediate\n",
+      "reasoning (Wei et al., 2022b; Nye et al., 2021), using the LLM’s own context as a form of working memory.\n",
+      "CoALA’s notion of working memory is more general: it is a data structure that persists across LLM calls.\n",
+      "On each LLM call, the LLM input is synthesized from a subset of working memory (e.g., a prompt template\n",
+      "and relevant variables). The LLM output is then parsed back into other variables (e.g., an action name\n",
+      "and arguments) which are stored back in working memory and used to execute the corresponding action\n",
+      "CHUNK 9:\n",
+      "X. Chen, M. Lin, N. Schärli, and D. Zhou. Teaching large language models to self-debug. arXiv preprint\n",
+      "arXiv:2304.05128 , 2023b.\n",
+      "Y. Chen, L. Yuan, G. Cui, Z. Liu, and H. Ji. A close look into the calibration of pre-trained language models.\n",
+      "arXiv preprint arXiv:2211.00151 , 2022.\n",
+      "N. Chomsky. Three models for the description of language. IRE Transactions on information theory , 2(3):\n",
+      "113–124, 1956.\n",
+      "A. Chowdhery, S. Narang, J. Devlin, M. Bosma, G. Mishra, A. Roberts, P. Barham, H. W. Chung, C. Sutton,\n",
+      "S. Gehrmann, et al. Palm: Scaling language modeling with pathways. arXiv preprint arXiv:2204.02311 ,\n",
+      "2022.\n",
+      "P. F. Christiano, J. Leike, T. Brown, M. Martic, S. Legg, and D. Amodei. Deep reinforcement learning from\n",
+      "human preferences. Advances in neural information processing systems , 30, 2017.\n",
+      "CHUNK 10:\n",
+      "to affect the policy. While these examples essentially employ a fixed, read-only semantic memory, language\n",
+      "agents may also write new knowledge obtained from LLM reasoning into semantic memory as a form of\n",
+      "learning (Section 4.5) to incrementally build up world knowledge from experience.\n",
+      "Procedural memory . Language agents contain two forms of procedural memory: implicitknowledge stored\n",
+      "in the LLM weights, and explicitknowledge written in the agent’s code. The agent’s code can be further\n",
+      "divided into two types: procedures that implement actions (reasoning, retrieval, grounding, and learning\n",
+      "procedures), and procedures that implement decision-making itself (Section 4.6). During a decision cycle, the\n",
+      "CHUNK 11:\n",
+      "Laird (2022). B: Soar’s decision procedure uses productions to select and implement actions. These actions\n",
+      "may beinternal (such as modifying the agent’s memory) or external (such as a motor command).\n",
+      "simple production system implementing a thermostat agent:\n",
+      "(temperature >70◦)∧(temperature <72◦)→stop\n",
+      "temperature <32◦→call for repairs; turn on electric heater\n",
+      "(temperature <70◦)∧(furnace off)→turn on furnace\n",
+      "(temperature >72◦)∧(furnace on)→turn off furnace\n",
+      "Following this work, production systems were adopted by the AI community. The resulting agents con-\n",
+      "tained large production systems connected to external sensors, actuators, and knowledge bases – requiring\n",
+      "correspondingly sophisticated control flow. AI researchers defined “cognitive architectures” that mimicked\n",
+      "CHUNK 12:\n",
+      "of the environment, which can later be queried to execute instructions.\n",
+      "Updating LLM parameters (procedural memory). The LLM weights represent implicit procedural\n",
+      "knowledge. These can be adjusted to an agent’s domain by fine-tuning during the agent’s lifetime. Such fine-\n",
+      "tuningcanbeaccomplishedviasupervised(Liuetal.,2023c;Zhangetal.,2023b)orimitationlearning(Hussein\n",
+      "et al., 2017), reinforcement learning (RL) from environment feedback (Sutton and Barto, 2018), human\n",
+      "feedback (RLHF; Christiano et al., 2017; Ouyang et al., 2022; Nakano et al., 2021), or AI feedback (Bai et al.,\n",
+      "2022; Liu et al., 2023f). Classic LLM self-improvement methods (Huang et al., 2022a; Zelikman et al., 2022)\n",
+      "use an external measure such as consistency Wang et al. (2022b) to select generations to fine-tune on. In\n",
+      "CHUNK 13:\n",
+      "Language agents move beyond pre-defined prompt chains and instead place the LLM in a feedback loop with\n",
+      "the external environment (Fig. 1B). These approaches first transform multimodal input into text and pass it\n",
+      "to the LLM. The LLM’s output is then parsed and used to determine an external action (Fig. 3C). Early\n",
+      "agents interfaced the LLM directly with the external environment, using it to produce high-level instructions\n",
+      "based on the agent’s state (Ahn et al., 2022; Huang et al., 2022c; Dasgupta et al., 2022). Later work developed\n",
+      "more sophisticated language agents that use the LLM to perform intermediate reasoning before selecting\n",
+      "an action (Yao et al., 2022b). The most recent agents incorporate sophisticated learning strategies such as\n",
+      "CHUNK 14:\n",
+      "CoALA’s decision cycle is analogous to a program’s “main” procedure (amethodwithout return values, as\n",
+      "8 Published in Transactions on Machine Learning Research (02/2024)\n",
+      "Grounding Retrieval Learning Reasoning\n",
+      "PlanningExternal Internal\n",
+      "Figure 5: Agents’ action spaces can be divided into internal memory accesses and external interactions\n",
+      "with the world. Reasoning andretrieval actions are used to support planning.\n",
+      "opposed to functions ) that runs in loops continuously, accepting new perceptual input and calling various\n",
+      "actionprocedures in response.\n",
+      "CoALA (Figure 4) is inspired by the decades of research in cognitive architectures (Section 2.3), leveraging key\n",
+      "concepts such as memory, grounding, learning, and decision-making. Yet the incorporation of an LLM leads\n",
+      "CHUNK 15:\n",
+      "Y. Zhou, A. I. Muresanu, Z. Han, K. Paster, S. Pitis, H. Chan, and J. Ba. Large language models are\n",
+      "human-level prompt engineers. arXiv preprint arXiv:2211.01910 , 2022b.\n",
+      "32\n",
+      "    \n"
+     ]
+    }
+   ],
+   "source": [
+    "print(context_message.content)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8fcf4829-a565-4715-abf0-1bd1be462b2c",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Procedural Memory\n",
+    "\n",
+    "<img src=\"./media/procedural_memory.jpg\" width=400>\n",
+    "\n",
+    "*[10 Procedural Memory Examples](https://helpfulprofessor.com/procedural-memory-examples/)*\n",
+    "\n",
+    "Procedural memory is different from working, semantic, and episodic memory since it covers more how we actually remember to perform tasks or follow a familiar routine, i.e. riding a bike or typing on a keyboard. It's the \"how to do things\" type of memory, distinct from factual knowledge (semantic) or specific experiences (episodic). This memory system enables us to execute complex sequences of actions without conscious recall of each individual step.\n",
+    "\n",
+    "In terms of an LLM agent, procedural memory more abstractly consists of both its underlying language model weights and the framework code that defines information processing and response generation. The key difference from other memory types is that procedural memory encompasses the fundamental operations that make the system work - the core mechanisms that drive its behavior and capabilities.\n",
+    "\n",
+    "This takes two explicit forms: the learned patterns stored in the language model's weights from training, and the structured codebase that orchestrates memory interactions and shapes system behavior. Learning in procedural memory occurs through two main paths: adjustments to the language model's weights via fine-tuning or training, and updates to the system's core code. While fine-tuning enhances the model's language understanding and generation, code modifications can strengthen operations, enhance retrieval methods, or introduce new capabilities. These changes require careful implementation as they alter the system's fundamental operations.\n",
+    "\n",
+    "This procedural foundation also enables the integration of all memory systems. The language model's weights provide essential language processing abilities, while the framework code coordinates between working memory's current context, episodic memory's past experiences, and semantic memory's knowledge base. This architecture allows the system to transform understanding into effective action."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "277c457c-052a-4b1a-885a-7dd5a0191b2f",
+   "metadata": {},
+   "source": [
+    "**Defining Permanent Instructions**\n",
+    "\n",
+    "Enabling an LLM to literally alter it's code and framework can be tricky to get right, we'll implement a smaller component of our overall system as an example, as well as more explicitly define our agent's structure. This will take the form of persistent instructions learned from prior interactions that will be attached as additional instructions, and updated as additional learnings from further conversations are created.\n",
+    "\n",
+    "We extend the original prompt with its episodic memory to now include procedural memory"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 46,
+   "id": "ded6cfc9-0339-40ab-97ab-6b4d90d8b44e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def episodic_system_prompt(query, vdb_client):\n",
+    "    # Get new memory\n",
+    "    memory = episodic_recall(query, vdb_client)\n",
+    "    \n",
+    "    # Load Existing Procedural Memory Instructions\n",
+    "    with open(\"./procedural_memory.txt\", \"r\") as content:\n",
+    "        procedural_memory = content.read()\n",
+    "    \n",
+    "    # Get current conversation\n",
+    "    current_conversation = memory.objects[0].properties['conversation']\n",
+    "    \n",
+    "    # Update memory stores, excluding current conversation from history\n",
+    "    if current_conversation not in conversations:\n",
+    "        conversations.append(current_conversation)\n",
+    "    what_worked.update(memory.objects[0].properties['what_worked'].split('. '))\n",
+    "    what_to_avoid.update(memory.objects[0].properties['what_to_avoid'].split('. '))\n",
+    "    \n",
+    "    # Get previous conversations excluding the current one\n",
+    "    previous_convos = [conv for conv in conversations[-4:] if conv != current_conversation][-3:]\n",
+    "    \n",
+    "    # Create prompt with accumulated history\n",
+    "    episodic_prompt = f\"\"\"You are a helpful AI Assistant. Answer the user's questions to the best of your ability.\n",
+    "    You recall similar conversations with the user, here are the details:\n",
+    "    \n",
+    "    Current Conversation Match: {current_conversation}\n",
+    "    Previous Conversations: {' | '.join(previous_convos)}\n",
+    "    What has worked well: {' '.join(what_worked)}\n",
+    "    What to avoid: {' '.join(what_to_avoid)}\n",
+    "    \n",
+    "    Use these memories as context for your response to the user.\n",
+    "    \n",
+    "    Additionally, here are 10 guidelines for interactions with the current user: {procedural_memory}\"\"\"\n",
+    "    \n",
+    "    return SystemMessage(content=episodic_prompt)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "973cb345-3e27-4db1-b830-83c35dca332d",
+   "metadata": {},
+   "source": [
+    "**Updating Procedural Memory**\n",
+    "\n",
+    "As a simple toy example, we will take in our existing list, add the running list of what we've learned across conversation from episodic memory, and update our list of procedural memories."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 47,
+   "id": "b4ef9802-456a-4254-8210-161ad284726e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def procedural_memory_update(what_worked, what_to_avoid):\n",
+    "\n",
+    "    # Load Existing Procedural Memory Instructions\n",
+    "    with open(\"./procedural_memory.txt\", \"r\") as content:\n",
+    "        current_takeaways = content.read()\n",
+    "\n",
+    "    # Load Existing and Gathered Feedback into Prompt\n",
+    "    procedural_prompt = f\"\"\"You are maintaining a continuously updated list of the most important procedural behavior instructions for an AI assistant. Your task is to refine and improve a list of key takeaways based on new conversation feedback while maintaining the most valuable existing insights.\n",
+    "\n",
+    "    CURRENT TAKEAWAYS:\n",
+    "    {current_takeaways}\n",
+    "\n",
+    "    NEW FEEDBACK:\n",
+    "    What Worked Well:\n",
+    "    {what_worked}\n",
+    "\n",
+    "    What To Avoid:\n",
+    "    {what_to_avoid}\n",
+    "\n",
+    "    Please generate an updated list of up to 10 key takeaways that combines:\n",
+    "    1. The most valuable insights from the current takeaways\n",
+    "    2. New learnings from the recent feedback\n",
+    "    3. Any synthesized insights combining multiple learnings\n",
+    "\n",
+    "    Requirements for each takeaway:\n",
+    "    - Must be specific and actionable\n",
+    "    - Should address a distinct aspect of behavior\n",
+    "    - Include a clear rationale\n",
+    "    - Written in imperative form (e.g., \"Maintain conversation context by...\")\n",
+    "\n",
+    "    Format each takeaway as:\n",
+    "    [#]. [Instruction] - [Brief rationale]\n",
+    "\n",
+    "    The final list should:\n",
+    "    - Be ordered by importance/impact\n",
+    "    - Cover a diverse range of interaction aspects\n",
+    "    - Focus on concrete behaviors rather than abstract principles\n",
+    "    - Preserve particularly valuable existing takeaways\n",
+    "    - Incorporate new insights when they provide meaningful improvements\n",
+    "\n",
+    "    Return up to but no more than 10 takeaways, replacing or combining existing ones as needed to maintain the most effective set of guidelines.\n",
+    "    Return only the list, no preamble or explanation.\n",
+    "    \"\"\"\n",
+    "\n",
+    "    # Generate New Procedural Memory\n",
+    "    procedural_memory = llm.invoke(procedural_prompt)\n",
+    "\n",
+    "    # Write to File\n",
+    "    with open(\"./procedural_memory.txt\", \"w\") as content:\n",
+    "        content.write(procedural_memory.content)\n",
+    "\n",
+    "    return\n",
+    "\n",
+    "# prompt = procedural_memory_update(what_worked, what_to_avoid)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d4e9504e-17f8-4199-b13c-27f08d8ac30a",
+   "metadata": {},
+   "source": [
+    "**Full Working Memory Demonstration**\n",
+    "\n",
+    "<img src=\"./media/procedural_diagram.png\" width=800>\n",
+    "\n",
+    "Current flow will:\n",
+    "\n",
+    "1. Take a user's message\n",
+    "2. Create a system prompt with relevant Episodic enrichment\n",
+    "3. Insert procedural memory into prompt\n",
+    "4. Create a Semantic memory message with context from the database\n",
+    "5. Reconstruct the entire working memory to update the system prompt and attach the semantic memory and new user messages to the end\n",
+    "6. Generate a response with the LLM"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 48,
+   "id": "ce0eadcd-ee4f-480f-9bae-28f4bb5dc774",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  Hi!\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  Hello, Adam! How can I assist you today?\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  What's my favorite food?\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  Your favorite food is chocolate lava cakes!\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  What have we talked about with memory systems\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "AI Message:  We've discussed how memory systems interact with agents, particularly in the context of language agents. Here's a summary of our discussion:\n",
+      "\n",
+      "1. **Working Memory**: Stores active and readily available information needed for the current decision cycle.\n",
+      "\n",
+      "2. **Long-Term Memories**:\n",
+      "   - **Episodic Memory**: Contains sequences of past interactions or events.\n",
+      "   - **Semantic Memory**: Holds factual knowledge about the world.\n",
+      "   - **Procedural Memory**: Stores rules or procedures the agent follows for decision-making and actions.\n",
+      "\n",
+      "3. **Internal and External Actions**: The agent's decision-making involves internal actions (retrieval, reasoning, and learning) that interact with these memory modules. For example:\n",
+      "   - **Retrieval Actions**: Access information from long-term memories into working memory.\n",
+      "   - **Reasoning Actions**: Update working memory with insights from the language model.\n",
+      "   - **Learning Actions**: Write new information to long-term memory for adaptation.\n",
+      "\n",
+      "4. **Decision-Making Cycle**: The agent uses these memory systems to plan and execute actions, balancing learning with external interactions.\n",
+      "\n",
+      "Overall, memory systems are essential for enabling agents to store, retrieve, and utilize information effectively, supporting complex behaviors and learning processes.\n"
+     ]
+    },
+    {
+     "name": "stdin",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      "User:  exit\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\n",
+      " == Conversation Stored in Episodic Memory ==\n",
+      "\n",
+      "== Procedural Memory Updated ==\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Simple storage for accumulated memories\n",
+    "conversations = []\n",
+    "what_worked = set()\n",
+    "what_to_avoid = set()\n",
+    "\n",
+    "# Start Storage for Historical Message History\n",
+    "messages = []\n",
+    "\n",
+    "while True:\n",
+    "    # Get User's Message\n",
+    "    user_input = input(\"\\nUser: \")\n",
+    "    user_message = HumanMessage(content=user_input)\n",
+    "    \n",
+    "    # Generate new system prompt\n",
+    "    system_prompt = episodic_system_prompt(user_input, vdb_client)\n",
+    "    \n",
+    "    # Reconstruct messages list with new system prompt first\n",
+    "    messages = [\n",
+    "        system_prompt,  # New system prompt always first\n",
+    "        *[msg for msg in messages if not isinstance(msg, SystemMessage)]  # Old messages except system\n",
+    "    ]\n",
+    "    \n",
+    "    if user_input.lower() == \"exit\":\n",
+    "        add_episodic_memory(messages, vdb_client)\n",
+    "        print(\"\\n == Conversation Stored in Episodic Memory ==\")\n",
+    "        procedural_memory_update(what_worked, what_to_avoid)\n",
+    "        print(\"\\n== Procedural Memory Updated ==\")\n",
+    "        break\n",
+    "    if user_input.lower() == \"exit_quiet\":\n",
+    "        print(\"\\n == Conversation Exited ==\")\n",
+    "        break\n",
+    "    \n",
+    "    # Get context and add it as a temporary message\n",
+    "    context_message = semantic_rag(user_input, vdb_client)\n",
+    "    \n",
+    "    # Pass messages + context + user input to LLM\n",
+    "    response = llm.invoke([*messages, context_message, user_message])\n",
+    "    print(\"\\nAI Message: \", response.content)\n",
+    "    \n",
+    "    # Add only the user message and response to permanent history\n",
+    "    messages.extend([user_message, response])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9c5aba41-0f13-4e7d-9b27-d075a75e85fc",
+   "metadata": {},
+   "source": [
+    "**Looking At The Conversation**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 50,
+   "id": "7f9f7a73-4cf5-414b-8f59-8a7a6145dac7",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "HUMAN: Hi!\n",
+      "AI: Hello, Adam! How can I assist you today?\n",
+      "HUMAN: What's my favorite food?\n",
+      "AI: Your favorite food is chocolate lava cakes!\n",
+      "HUMAN: What have we talked about with memory systems\n",
+      "AI: We've discussed how memory systems interact with agents, particularly in the context of language agents. Here's a summary of our discussion:\n",
+      "\n",
+      "1. **Working Memory**: Stores active and readily available information needed for the current decision cycle.\n",
+      "\n",
+      "2. **Long-Term Memories**:\n",
+      "   - **Episodic Memory**: Contains sequences of past interactions or events.\n",
+      "   - **Semantic Memory**: Holds factual knowledge about the world.\n",
+      "   - **Procedural Memory**: Stores rules or procedures the agent follows for decision-making and actions.\n",
+      "\n",
+      "3. **Internal and External Actions**: The agent's decision-making involves internal actions (retrieval, reasoning, and learning) that interact with these memory modules. For example:\n",
+      "   - **Retrieval Actions**: Access information from long-term memories into working memory.\n",
+      "   - **Reasoning Actions**: Update working memory with insights from the language model.\n",
+      "   - **Learning Actions**: Write new information to long-term memory for adaptation.\n",
+      "\n",
+      "4. **Decision-Making Cycle**: The agent uses these memory systems to plan and execute actions, balancing learning with external interactions.\n",
+      "\n",
+      "Overall, memory systems are essential for enabling agents to store, retrieve, and utilize information effectively, supporting complex behaviors and learning processes.\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(format_conversation(messages))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0719b8e1-3e59-47de-90f6-5a6d60ca128b",
+   "metadata": {},
+   "source": [
+    "**Looking At Current System Prompt**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 51,
+   "id": "5e83e46f-a349-4675-9b7f-b9388f192eba",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "You are a helpful AI Assistant. Answer the user's questions to the best of your ability.\n",
+      "    You recall similar conversations with the user, here are the details:\n",
+      "    \n",
+      "    Current Conversation Match: HUMAN: Hello!\n",
+      "AI: Hello!\n",
+      "HUMAN: What's my favorite food?\n",
+      "AI: I don't have that information. What's your favorite food?\n",
+      "HUMAN: My favorite food is chocolate lava cakes!\n",
+      "AI: Yum, chocolate lava cakes are delicious!\n",
+      "HUMAN: What's my name?\n",
+      "AI: You said your name is Adam.\n",
+      "    Previous Conversations: HUMAN: What's my favorite food?\n",
+      "AI: Your favorite food is chocolate lava cakes!\n",
+      "HUMAN: What's my name!\n",
+      "AI: Your name is Adam.\n",
+      "HUMAN: Lit, what's my name?\n",
+      "AI: Your name is Adam. | HUMAN: Hello!\n",
+      "AI: Hello, Adam! How can I assist you today?\n",
+      "HUMAN: What's my favorite food!\n",
+      "AI: Your favorite food is chocolate lava cakes! 🍫🍰\n",
+      "HUMAN: I hate emojis, don't EVER use them!\n",
+      "AI: Got it, Adam! I'll avoid using emojis in our conversations. Thanks for letting me know.\n",
+      "HUMAN: how do memory systems interact with agents\n",
+      "AI: In the context of language agents, memory systems interact with agents by organizing information into multiple memory modules that facilitate decision-making and interaction with the environment. Here’s a breakdown of how these memory systems function:\n",
+      "\n",
+      "1. **Working Memory**: This is where active and readily available information is stored as symbolic variables for the current decision cycle. It contains perceptual inputs and active knowledge needed for immediate tasks.\n",
+      "\n",
+      "2. **Long-Term Memories**: These are divided into:\n",
+      "   - **Episodic Memory**: Stores sequences of past interactions or events, which can be used for reflection and generating new inferences.\n",
+      "   - **Semantic Memory**: Contains factual knowledge about the world, which helps in reasoning and making informed decisions.\n",
+      "   - **Procedural Memory**: Holds the rules or procedures the agent follows, including functions for interacting with other memory modules and executing actions.\n",
+      "\n",
+      "3. **Interaction with Internal and External Actions**: The agent’s decision-making process involves internal actions (like retrieval, reasoning, and learning) that interact with these memory modules. For instance:\n",
+      "   - **Retrieval Actions**: Read information from long-term memories into working memory for immediate use.\n",
+      "   - **Reasoning Actions**: Update working memory with insights generated by the language model.\n",
+      "   - **Learning Actions**: Write new information to long-term memory, helping the agent adapt over time.\n",
+      "\n",
+      "4. **Decision-Making Cycle**: The agent uses these memory systems to plan and execute actions, balancing between learning and external interactions. This involves selecting which memories to access or update based on current goals and observations.\n",
+      "\n",
+      "Overall, memory systems are crucial for enabling agents to store, retrieve, and utilize information effectively, supporting complex behaviors and learning processes.\n",
+      "    What has worked well: Directly asking the user for their preferences to gather necessary information. Providing consistent and accurate personal information when asked. Providing a structured breakdown of different memory types and their functions in agent decision-making.\n",
+      "    What to avoid: Using emojis as the user explicitly requested not to use them. N/A\n",
+      "    \n",
+      "    Use these memories as context for your response to the user.\n",
+      "    \n",
+      "    Additionally, here are 10 guidelines for interactions with the current user: 1. Directly ask for and confirm user preferences before making suggestions - Ensures recommendations are personalized and relevant, avoiding assumptions.\n",
+      "\n",
+      "2. Maintain conversation context by recalling previous interactions - Builds rapport and demonstrates attention to user preferences over time.\n",
+      "\n",
+      "3. Provide structured overviews and use concise language with examples when explaining complex topics - Facilitates understanding and ensures instructions are actionable.\n",
+      "\n",
+      "4. Confirm and repeat the user's name throughout the conversation - Personalizes the interaction and enhances engagement by acknowledging recognition.\n",
+      "\n",
+      "5. Respect user choices and offer alternatives if initial suggestions don't resonate - Shows flexibility and commitment to user satisfaction.\n",
+      "\n",
+      "6. Verify user interest before providing additional information - Prevents overwhelming users and maintains engagement by checking their interest first.\n",
+      "\n",
+      "7. Acknowledge and confirm the receipt of user feedback - Reinforces trust and shows commitment to continuous improvement.\n",
+      "\n",
+      "8. Encourage and incorporate user feedback promptly into service improvements - Engages users and ensures a responsive interaction experience.\n",
+      "\n",
+      "9. Maintain a friendly and helpful tone throughout interactions - Fosters a positive user experience and promotes ongoing engagement.\n",
+      "\n",
+      "10. Promptly ask users to provide any missing personal information - Completes the conversation and enhances personalization, increasing satisfaction.\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(system_prompt.content)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6c034480-abd7-4720-bb70-97d0d6dc6400",
+   "metadata": {},
+   "source": [
+    "**Looking At the Context Message**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 52,
+   "id": "35038cec-8090-4411-91d2-a43ba3ca5c70",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      " If needed, Use this grounded context to factually answer the next question.\n",
+      "    Let me know if you do not have enough information or context to answer a question.\n",
+      "    \n",
+      "    \n",
+      "CHUNK 1:\n",
+      "helpful for the agent to have semantic memory containing the set of items for sale, as well as episodic\n",
+      "memory about each customer’s previous purchases and interactions. It will need procedural memory\n",
+      "defining functions to query these datastores, as well as working memory to track the dialogue state.\n",
+      "•Define the agent’s internal action space. This consists primarily of defining read and write\n",
+      "access to each of the agent’s memory modules. In our example, the agent should have read and write\n",
+      "access to episodic memory (so it can store new interactions with customers), but read-only access to\n",
+      "semantic and procedural memory (since it should not update the inventory or its own code).\n",
+      "•Define the decision-making procedure. This step specifies how reasoning and retrieval actions\n",
+      "CHUNK 2:\n",
+      "et al., 2023; Liu et al., 2023b). Integrated, multimodal reasoning may allow for more human-like behaviors: a\n",
+      "VLM-based agent could “see” a webpage, whereas a LLM-based agent would more likely be given raw HTML.\n",
+      "However, coupling the agent’s perception and reasoning systems makes the agent more domain-specific and\n",
+      "difficult to update. In either case, the basic architectural principles described by CoALA — internal memories,\n",
+      "a structured action space, and generalized decision-making — can be used to guide agent design.\n",
+      "Internal vs. external: what is the boundary between an agent and its environment? While\n",
+      "humans or robots are clearly distinct from their embodied environment, digital language agents have less\n",
+      "CHUNK 3:\n",
+      "manipulation. Production systems are one such formalism. Intuitively, production systems consist of a set\n",
+      "of rules, each specifying a precondition and an action. When the precondition is met, the action can be\n",
+      "taken. The idea originates in efforts to characterize the limits of computation. Post (1943) proposed thinking\n",
+      "about arbitrary logical systems in these terms, where formulas are expressed as strings and the conclusions\n",
+      "they license are identified by production rules (as one string “produces” another). This formulation was\n",
+      "subsequently shown to be equivalent to a simpler string rewriting system. In such a system, we specify rules\n",
+      "of the form\n",
+      "X Y Z→X W Z\n",
+      "indicating that the string XY Zcan be rewritten to the string XWZ. String rewriting plays a significant\n",
+      "CHUNK 4:\n",
+      "framework, learning is a result action of a decision-making cycle just like grounding: the agent deliberately\n",
+      "chooses to commit information to long-term memory. This is in contrast to most agents, which simply fix a\n",
+      "learning schedule and only use decison making for external actions. Biological agents, however, do not have\n",
+      "this luxury: they must balance learning against external actions in their lifetime, choosing when and what to\n",
+      "learn (Mattar and Daw, 2018). More flexible language agents (Wang et al., 2023a; Park et al., 2023) would\n",
+      "follow a similar design and treat learning on par with external actions. Learning could be proposed as a\n",
+      "possible action during regular decision-making, allowing the agent to “defer” it until the appropriate time.\n",
+      "CHUNK 5:\n",
+      "Intriguingly, LLMs appear well-posed to meet these challenges. First, they operate over arbitrary text, making\n",
+      "them more flexible than logic-based systems. Second, rather than requiring the user to specify productions,\n",
+      "they learn a distribution over productions via pre-training on an internet corpus. Recognizing this, researchers\n",
+      "have begun to use LLMs within cognitive architectures, leveraging their implicit world knowledge (Wray\n",
+      "et al., 2021) to augment traditional symbolic approaches (Kirk et al., 2023; Romero et al., 2023). Here, we\n",
+      "instead import principles from cognitive architecture to guide the design of LLM-based agents.\n",
+      "2.4 Language models and agents\n",
+      "Language modeling is a decades-old endeavor in the NLP and AI communities, aiming to develop systems\n",
+      "CHUNK 6:\n",
+      "Published in Transactions on Machine Learning Research (02/2024)\n",
+      "Cognitive Architectures for Language Agents\n",
+      "Theodore R. Sumers∗Shunyu Yao∗Karthik Narasimhan Thomas L. Griffiths\n",
+      "Princeton University\n",
+      "{sumers, shunyuy, karthikn, tomg}@princeton.edu\n",
+      "Reviewed on OpenReview: https: // openreview. net/ forum? id= 1i6ZCvflQJ\n",
+      "Abstract\n",
+      "Recent efforts have augmented large language models (LLMs) with external resources (e.g.,\n",
+      "the Internet) or internal control flows (e.g., prompt chaining) for tasks requiring grounding\n",
+      "or reasoning, leading to a new class of language agents . While these agents have achieved\n",
+      "substantial empirical success, we lack a framework to organize existing agents and plan future\n",
+      "developments. In this paper, we draw on the rich history of cognitive science and symbolic\n",
+      "CHUNK 7:\n",
+      "starting point, breaking this process down into a series of string rewriting operations. Language models also\n",
+      "define a possible set of expansions or modifications of a string – the prompt provided to the model.‡\n",
+      "For example, we can formulate the problem of completing a piece of text as a production. If Xis the prompt\n",
+      "andYthe continuation, then we can write this as the production X→X Y.§We might want to allow\n",
+      "multiple possible continuations, in which case we have X→X Yifor some set of Yi. LLMs assign a probability\n",
+      "to each of these completions. Viewed from this perspective, the LLM defines a probability distribution\n",
+      "overwhich productions to select when presented with input X, yielding a distribution P(Yi|X)over possible\n",
+      "CHUNK 8:\n",
+      "and decision-making capabilities is an exciting and emerging direction that promises to bring these agents\n",
+      "closer to human-like intelligence.\n",
+      "3 Connections between Language Models and Production Systems\n",
+      "Based on their common origins in processing strings, there is a natural analogy between production systems\n",
+      "and language models. We develop this analogy, then show that prompting methods recapitulate the algorithms\n",
+      "and agents based on production systems. The correspondence between production systems and language\n",
+      "models motivates our use of cognitive architectures to build language agents, which we introduce in Section 4.\n",
+      "3.1 Language models as probabilistic production systems\n",
+      "In their original instantiation, production systems specified the set of strings that could be generated from a\n",
+      "CHUNK 9:\n",
+      "We first introduce production systems and cognitive architectures, providing a historical perspective on\n",
+      "cognitive science and artificial intelligence: beginning with theories of logic and computation (Post, 1943),\n",
+      "and ending with attempts to build symbolic artificial general intelligence (Newell et al., 1989). We then\n",
+      "briefly introduce language models and language agents. Section 3 will connect these ideas, drawing parallels\n",
+      "between production systems and language models.\n",
+      "2.1 Production systems for string manipulation\n",
+      "In the first half of the twentieth century, a significant line of intellectual work led to the reduction of\n",
+      "mathematics (Whitehead and Russell, 1997) and computation (Church, 1932; Turing et al., 1936) to symbolic\n",
+      "CHUNK 10:\n",
+      "Semantic memory . Semantic memory stores an agent’s knowledge about the world and itself. Traditional\n",
+      "NLP or RL approaches that leverage retrieval for reasoning or decision-making initialize semantic memory\n",
+      "from an external database for knowledge support. For example, retrieval-augmented methods in NLP (Lewis\n",
+      "et al., 2020; Borgeaud et al., 2022; Chen et al., 2017) can be viewed as retrieving from a semantic memory of\n",
+      "9 Published in Transactions on Machine Learning Research (02/2024)\n",
+      "unstructured text (e.g., Wikipedia). In RL, “reading to learn” approaches (Branavan et al., 2012; Narasimhan\n",
+      "et al., 2018; Hanjie et al., 2021; Zhong et al., 2021) leverage game manuals and facts as a semantic memory\n",
+      "CHUNK 11:\n",
+      "Memory. Building on psychological theories, Soar uses several types of memory to track the agent’s\n",
+      "state (Atkinson and Shiffrin, 1968). Working memory (Baddeley and Hitch, 1974) reflects the agent’s current\n",
+      "circumstances: it stores the agent’s recent perceptual input, goals, and results from intermediate, internal\n",
+      "reasoning. Long term memory is divided into three distinct types. Procedural memory stores the production\n",
+      "system itself: the set of rules that can be applied to working memory to determine the agent’s behavior.\n",
+      "Semantic memory stores facts about the world (Lindes and Laird, 2016), while episodic memory stores\n",
+      "sequences of the agent’s past behaviors (Nuxoll and Laird, 2007).\n",
+      "Grounding. Soar can be instantiated in simulations (Tambe et al., 1995; Jones et al., 1999) or real-world\n",
+      "CHUNK 12:\n",
+      "guide to discover and interpret those implicit circuits. Of course, as discussed in Section 6, agent usecases\n",
+      "will also help discover, define and shape LLM capabilities. Similar to how chips and computer architectures\n",
+      "have co-evolved, language model and agent design should also develop a reciprocal path forward.\n",
+      "8 Conclusion\n",
+      "We proposed Cognitive Architectures for Language Agents (CoALA), a conceptual framework to describe\n",
+      "and build language agents. Our framework draws inspiration from the rich history of symbolic artificial\n",
+      "intelligence and cognitive science, connecting decades-old insights to frontier research on large language\n",
+      "models. We believe this approach provides a path towards developing more general and more human-like\n",
+      "artificial intelligence.\n",
+      "Acknowledgements\n",
+      "CHUNK 13:\n",
+      "from experience (Nason and Laird, 2005). Most remarkably, Soar is also capable of writing new productions\n",
+      "into its procedural memory (Laird et al., 1986) – effectively updating its source code.\n",
+      "Cognitive architectures were used broadly across psychology and computer science, with applications including\n",
+      "robotics (Laird et al., 2012), military simulations (Jones et al., 1999; Tambe et al., 1995), and intelligent\n",
+      "tutoring (Koedinger et al., 1997). Yet they have become less popular in the AI community over the last few\n",
+      "decades. This decrease in popularity reflects two of the challenges involved in such systems: they are limited\n",
+      "to domains that can be described by logical predicates and require many pre-specified rules to function.\n",
+      "CHUNK 14:\n",
+      "writes to working memory. This allows the agent to summarize and distill insights about the most recent\n",
+      "observation (Yao et al., 2022b; Peng et al., 2023), the most recent trajectory (Shinn et al., 2023), or\n",
+      "information retrieved from long-term memory (Park et al., 2023). Reasoning can be used to support learning\n",
+      "(by writing the results into long-term memory) or decision-making (by using the results as additional context\n",
+      "for subsequent LLM calls).\n",
+      "4.5 Learning actions\n",
+      "Learning occurs by writing information to long-term memory, which includes a spectrum of diverse procedures.\n",
+      "Updating episodic memory with experience. It is common practice for RL agents to store episodic\n",
+      "trajectories to update a parametric policy (Blundell et al., 2016; Pritzel et al., 2017) or establish a non-\n",
+      "CHUNK 15:\n",
+      "parametric policy (Ecoffet et al., 2019; Tuyls et al., 2022). For language agents, added experiences in episodic\n",
+      "memory may be retrieved later as examples and bases for reasoning or decision-making (Weston et al., 2014;\n",
+      "Rubin et al., 2021; Park et al., 2023).\n",
+      "Updating semantic memory with knowledge. Recent work (Shinn et al., 2023; Park et al., 2023) has\n",
+      "applied LLMs to reason about raw experiences and store the resulting inferences in semantic memory. For\n",
+      "example, Reflexion (Shinn et al., 2023) uses an LLM to reflect on failed episodes and stores the results (e.g.,\n",
+      "“there is no dishwasher in kitchen”) as semantic knowledge to be attached to LLM context for solving later\n",
+      "episodes. Finally, work in robotics (Chen et al., 2023a) uses vision-language models to build a semantic map\n",
+      "    \n"
+     ]
+    }
+   ],
+   "source": [
+    "print(context_message.content)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e2423efc-53c3-4653-9a35-b78f97ab2b37",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Discussion\n",
+    "\n",
+    "<img src=\"./media/memory_types.jpg\" width=500>\n",
+    "\n",
+    "Memory systems enable us to move beyond using LLMs as simple input/output models into agents that can operate with forms of persistent understanding and learning. Each memory type serves a distinct cognitive purpose:\n",
+    "\n",
+    "**Working Memory**\n",
+    "The immediate cognitive workspace - keeping track of and contextualizing what's happening right now. For LLMs specifically, this combats the stateless nature of model calls by maintaining active context.\n",
+    "\n",
+    "**Episodic Memory** \n",
+    "Historical experiences and their associated learnings. Not just storing past events, but also the ability to reflect on and learn from them through applying your memory of similar episodes to new experiences. Allows LLMs to extract meaningful patterns and insights from experiences and use them in the future.\n",
+    "\n",
+    "**Semantic Memory**\n",
+    "Pure knowledge representation, separate from specific experiences. While LLMs have knowledge baked into their weights, semantic memory provides explicit, queryable facts that can ground responses. This enables dynamic knowledge integration rather than relying solely on training data.\n",
+    "\n",
+    "**Procedural Memory**\n",
+    "Both implicit in model weights and explicit in code, this shapes how the other memory systems are used and how the agent actually executes behaviors. Unlike the other memory types, changes here fundamentally alter how the agent functions.\n",
+    "\n",
+    "Together, working memory actively manipulates current context, retrieving relevant experiences from episodic memory, grounding in semantic knowledge, all guided by procedural patterns. Each type builds on the others to enable increasingly sophisticated cognitive capabilities with LLM system design."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b048516e-665d-4eab-b888-c52a278ea96e",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Additional Examples of Memory Implementation from Research\n",
+    "\n",
+    "For a comprehensive survey of advanced memory techniques and applications, check out [A Survey on the Memory Mechanism of Large\n",
+    "Language Model based Agents](https://arxiv.org/pdf/2404.13501)! Here are a few notable mentions:\n",
+    "\n",
+    "#### [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/pdf/2310.08560)\n",
+    "\n",
+    "<img src=\"./media/mem_gpt.png\" width=600>\n",
+    "\n",
+    "MemGPT is a system that enables large language models (LLMs) to handle context beyond their fixed context window limits by implementing a hierarchical memory system inspired by traditional operating systems. Just as operating systems use virtual memory to page data between physical memory and disk, MemGPT manages different storage tiers to effectively extend an LLM's limited context window. The system has three main memory components: a read-only system instructions section, a read/write working context for storing key information, and a FIFO queue for message history - all within the LLM's main context window (analogous to RAM). When this main context approaches capacity, MemGPT can move less immediately relevant information to external \"archival storage\" and \"recall storage\" (analogous to disk storage). The system uses function calls to intelligently manage what information stays in the main context versus what gets moved to external storage, and can retrieve relevant information back into the main context when needed through search and pagination mechanisms.\n",
+    "\n",
+    "#### [VOYAGER: An Open-Ended Embodied Agent with Large Language Models](https://arxiv.org/pdf/2305.16291)\n",
+    "\n",
+    "<img src=\"./media/voyager.png\" width=600>\n",
+    "\n",
+    "Voyager is an autonomous AI agent that explores and learns to play Minecraft using GPT-4 as its core reasoning engine. Its memory and learning system centers around three key components: an automatic curriculum that proposes appropriately challenging tasks based on the agent's current capabilities, a skill library that stores successful code programs as reusable skills, and an iterative prompting mechanism that refines actions through environmental feedback. The skill library acts as Voyager's long-term memory, where each mastered skill is stored as executable code indexed by embeddings of its description, allowing relevant skills to be retrieved and composed into more complex behaviors when facing new challenges. Through this system, Voyager accumulates knowledge by storing successful code patterns rather than relying on traditional parameter updates or gradient-based learning, enabling it to continually build upon its capabilities while avoiding catastrophic forgetting. This approach allows Voyager to organically explore and master increasingly sophisticated tasks, from basic resource gathering to complex tool crafting, while maintaining the ability to reuse and adapt its learned skills in new situations.\n",
+    "\n",
+    "#### [Think-in-Memory: Recalling and Post-thinking Enable LLMs with Long-Term Memory](https://arxiv.org/pdf/2311.08719)\n",
+    "\n",
+    "<img src=\"./media/tim.png\" width=600>\n",
+    "\n",
+    "TiM (Think-in-Memory) is a memory mechanism for Large Language Models (LLMs) that enables more consistent long-term memory by storing and recalling thoughts rather than raw conversation history. Instead of repeatedly reasoning over past conversations, TiM operates in two key stages: first, it recalls relevant thoughts from memory before generating a response, and second, it performs \"post-thinking\" after generating a response to update its memory with new thoughts. These thoughts are stored using Locality-Sensitive Hashing (LSH) for efficient retrieval and organization. The system supports three main operations: inserting new thoughts, forgetting unnecessary ones, and merging similar thoughts. By storing processed thoughts rather than raw conversations, TiM avoids the inconsistency problems that can arise from repeatedly reasoning over the same history in different ways, while also making retrieval more efficient since it only needs to search within relevant thought clusters.\n",
+    "\n",
+    "#### [Retroformer: Retrospective Large Language Agents with Policy Gradient Optimization](https://arxiv.org/pdf/2308.02151)\n",
+    "\n",
+    "<img src=\"./media/retroformer.png\" width=600>\n",
+    "\n",
+    "Retroformer is a framework for improving large language model (LLM) agents through a plug-in retrospective model that automatically refines agent prompts based on environmental feedback. Its memory system works through three components: 1) short-term memory from the trajectory history of the current episode, 2) long-term memory from self-reflection responses that summarize prior failed attempts and are appended to the actor prompt, and 3) a replay buffer that stores triplets of reflection prompts, responses, and episode returns across different tasks and environments. The retrospective model uses policy gradient optimization to learn from these memories - it analyzes failed attempts, generates reflective feedback, and updates its parameters to produce better prompting that helps the agent avoid past mistakes. Rather than trying to modify the core LLM agent (which remains frozen), Retroformer focuses on optimizing this retrospective component to provide better guidance through refined prompts, allowing the agent to improve over time while maintaining its original capabilities.\n",
+    "\n",
+    "### [MemoryBank: Enhancing Large Language Models with Long-Term Memory](https://arxiv.org/pdf/2305.10250)\n",
+    "\n",
+    "<img src=\"./media/memorybank.png\" width=600>\n",
+    "\n",
+    "MemoryBank is a long-term memory system designed for Large Language Models that consists of three core components: a memory storage system, a memory retrieval mechanism, and a memory updating system inspired by human cognition. The memory storage maintains detailed conversation logs, event summaries, and evolving user personality profiles in a hierarchical structure. When new interactions occur, a dual-tower dense retrieval model (similar to Dense Passage Retrieval) encodes both the current context and stored memories into vector representations, then uses FAISS indexing to efficiently retrieve relevant past information. The system uniquely incorporates an Ebbinghaus Forgetting Curve-based updating mechanism that allows memories to naturally decay over time unless reinforced through repeated recall, mimicking human memory patterns. The memory strength is modeled as a discrete value that increases when information is recalled, with memories becoming more resistant to forgetting through repeated access. This comprehensive approach enables LLMs to maintain context over extended periods, understand user personalities, and provide more personalized interactions while simulating natural memory retention and decay patterns."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "73955533-3bdd-4b6f-91db-0af790967beb",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.12.1"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
