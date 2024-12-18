@@ -9,6 +9,10 @@ sudo apt-get update
 # Install libssl3 and other required dependencies
 sudo apt-get install -y libssl3
 
+# Install pydantic-ai
+pip install pydantic-ai
+pip install pydantic-ai[logfire]
+
 # Clean up - remove the temporary source list
 sudo rm /etc/apt/sources.list.d/jammy.list
 sudo apt-get update

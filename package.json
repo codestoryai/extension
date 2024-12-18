@@ -6,7 +6,8 @@
   "version": "0.0.11",
   "private": true,
   "engines": {
-    "vscode": "^1.84.0"
+    "vscode": "^1.84.0",
+    "python": ">=3.9.0"
   },
   "repository": {
     "type": "git",
@@ -113,7 +114,7 @@
     "test": "vscode-test",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
     "prepare": "chmod +x scripts/codespace-setup.sh",
-    "postinstall": "if [ \"$CODESPACES\" = \"true\" ]; then ./scripts/codespace-setup.sh; fi"
+    "postinstall": "if [ \"$CODESPACES\" = \"true\" ]; then ./scripts/codespace-setup.sh && python3 -m pip install 'pydantic-ai[logfire]>=0.1.0' && python3 -m pip install 'pydantic>=2.0.0'; fi"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
