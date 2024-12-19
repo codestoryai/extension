@@ -36,6 +36,8 @@ If you are interested in fixing issues and contributing directly to the code bas
 
 The extension requires the following system dependencies:
 - libssl3 (OpenSSL 3.0)
+- Python 3.9 or newer
+- pydantic v2
 
 These dependencies will be automatically installed when running in GitHub Codespaces. For local development:
 
@@ -44,16 +46,26 @@ These dependencies will be automatically installed when running in GitHub Codesp
 # Add Ubuntu 22.04 repository for libssl3
 echo "deb http://archive.ubuntu.com/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/jammy.list
 sudo apt-get update
-sudo apt-get install -y libssl3
+sudo apt-get install -y libssl3 python3.9 python3-pip
+python3 -m pip install --upgrade pip
+python3 -m pip install -U pydantic
 ```
 
 #### macOS
 ```shell
 brew install openssl@3
+brew install python@3.9
+python3 -m pip install --upgrade pip
+python3 -m pip install -U pydantic
 ```
 
 #### Windows
 The required OpenSSL libraries are bundled with the Windows binary.
+```shell
+# Install Python 3.9 or newer using Windows Store or from python.org
+python3 -m pip install --upgrade pip
+python3 -m pip install -U pydantic
+```
 
 ### Development Setup
 
