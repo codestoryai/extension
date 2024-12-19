@@ -3,7 +3,7 @@
     <h1>SOTA SWE</h1>
 </div>
 
-**SotaSWE is a VSCode extension built atop [the leading agentic framework](https://github.com/codestoryai/sidecar) on SWE-bench Lite.**
+**SotaSWE is a VSCode extension built atop [the leading agentic framework](https://github.com/codestoryai/sidecar) on SWE-bench Lite. This is a working experimental repository for Memory LLM Agents using Pydantic to simulate human learning and thought and for aider using pydantic and custom tool support. I also plan on creating a Frontend using Roo-Cline and combining its features with the SOTA SWE features as well as the above. This build may be unstable so use with caution.**
 
 ![Latest release](https://img.shields.io/github/v/release/codestoryai/extension?label=version)
 ![Discord Shield](https://discord.com/api/guilds/1138070673756004464/widget.png?style=shield)
@@ -32,10 +32,47 @@ There are many ways in which you can participate in this project, for example:
 
 If you are interested in fixing issues and contributing directly to the code base,
 
+### System Requirements
+
+The extension requires the following system dependencies:
+- libssl3 (OpenSSL 3.0)
+- Python 3.9 or newer
+- pydantic v2
+
+These dependencies will be automatically installed when running in GitHub Codespaces. For local development:
+
+#### Ubuntu/Debian
+```shell
+# Add Ubuntu 22.04 repository for libssl3
+echo "deb http://archive.ubuntu.com/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/jammy.list
+sudo apt-get update
+sudo apt-get install -y libssl3 python3.9 python3-pip
+python3 -m pip install --upgrade pip
+python3 -m pip install -U pydantic
+```
+
+#### macOS
+```shell
+brew install openssl@3
+brew install python@3.9
+python3 -m pip install --upgrade pip
+python3 -m pip install -U pydantic
+```
+
+#### Windows
+The required OpenSSL libraries are bundled with the Windows binary.
+```shell
+# Install Python 3.9 or newer using Windows Store or from python.org
+python3 -m pip install --upgrade pip
+python3 -m pip install -U pydantic
+```
+
+### Development Setup
+
 1. Install dependencies
 
 ```shell
-  npm install
+npm install
 ```
 
 2. Run the extension in development mode with hot-reload
