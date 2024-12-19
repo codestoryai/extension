@@ -3,7 +3,7 @@
     <h1>SOTA SWE</h1>
 </div>
 
-**SotaSWE is a VSCode extension built atop [the leading agentic framework](https://github.com/codestoryai/sidecar) on SWE-bench Lite.**
+**SotaSWE is a VSCode extension built atop [the leading agentic framework](https://github.com/codestoryai/sidecar) on SWE-bench Lite. This is a working experimental repository for Memory LLM Agents using Pydantic to simulate human learning and thought and for aider using pydantic and custom tool support. I also plan on creating a Frontend using Roo-Cline and combining its features with the SOTA SWE features as well as the above. This build may be unstable so use with caution.**
 
 ![Latest release](https://img.shields.io/github/v/release/codestoryai/extension?label=version)
 ![Discord Shield](https://discord.com/api/guilds/1138070673756004464/widget.png?style=shield)
